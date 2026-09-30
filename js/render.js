@@ -1,5 +1,5 @@
 // Timeline, frame drawing (images, video clips, subtitles) and audio mix.
-import { S } from './state.js';
+import { S } from './state.js?v=2026.09.30-3';
 
 export const W0 = 1080, H0 = 1920;
 const st = () => S.style;

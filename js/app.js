@@ -1,10 +1,10 @@
-import { S, P, saveSettings, newProject, nextId } from './state.js';
-import * as pipe from './pipeline.js';
-import { saveProject, loadProject, clearProject } from './store.js';
-import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js';
-import { exportVideo } from './export.js';
-import { testKeys } from './apis.js';
-import { resetMock } from './mock.js';
+import { S, P, saveSettings, newProject, nextId, VERSION } from './state.js?v=2026.09.30-3';
+import * as pipe from './pipeline.js?v=2026.09.30-3';
+import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-3';
+import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-3';
+import { exportVideo } from './export.js?v=2026.09.30-3';
+import { testKeys } from './apis.js?v=2026.09.30-3';
+import { resetMock } from './mock.js?v=2026.09.30-3';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -127,7 +127,7 @@ $('#briefForm').addEventListener('submit', async e => {
   const brief = readBrief();
   if (!brief.theme) { toast('作りたい内容を書いてください'); $('#theme').focus(); return; }
   resetMock(); newProject(brief); $('#log').innerHTML = '';
-  addLog('system', `制作を開始します（${S.demo ? 'デモモード' : `Claude: ${S.models.claude} / 画像: ${S.models.image} / 音声: ${S.models.tts}`}）`, 'info');
+  addLog('system', `制作を開始します（v${VERSION} · ${S.demo ? 'デモモード' : `Claude: ${S.models.claude} / 画像: ${S.models.image} / 音声: ${S.models.tts}`}）`, 'info');
   renderAll(); await saveProject();
   await runPipeline(pipe.run);
 });
@@ -436,7 +436,7 @@ $('#bgmDel').addEventListener('click', () => { if (!P.cur) return; pausePreview(
 function renderBgm() { const b = P.cur && P.cur.bgm; $('#bgmName').textContent = b ? b.name : 'なし'; $('#bgmDel').hidden = !b; }
 
 /* ---------- boot ---------- */
-bindSettings(); updateKeyWarn();
+bindSettings(); updateKeyWarn(); $('#ver').textContent = VERSION;
 (async () => {
   const pr = await loadProject();
   if (pr) {

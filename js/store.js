@@ -1,7 +1,7 @@
 // Keeps the current project (including generated images, clips and voices) in IndexedDB on this device.
-import { P, newScene } from './state.js';
-import { setImageBlob, setAudioBlob, setVideoBlob } from './pipeline.js';
-import { decodeAudio } from './render.js';
+import { P, newScene } from './state.js?v=2026.09.30-3';
+import { setImageBlob, setAudioBlob, setVideoBlob } from './pipeline.js?v=2026.09.30-3';
+import { decodeAudio } from './render.js?v=2026.09.30-3';
 
 const DB = 'shorts-studio', ST = 'kv';
 let dbp = null;
