@@ -48,20 +48,53 @@ function addCost(kind, n) {
 }
 
 /* ---------- Claude ---------- */
-// content: array of Anthropic content blocks. Forces one tool call and returns its input.
-export async function claudeTool({ system, content, tool, maxTokens = 6000, signal }) {
+// Structured-output schemas need additionalProperties:false on every object.
+function strictSchema(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (Array.isArray(s)) return s.map(strictSchema);
+  const o = {};
+  for (const k in s) o[k] = (k === 'properties') ? Object.fromEntries(Object.entries(s[k]).map(([p, v]) => [p, strictSchema(v)])) : strictSchema(s[k]);
+  if (o.type === 'object') o.additionalProperties = false;
+  return o;
+}
+// Pull the first complete JSON object out of a text reply.
+function parseJsonText(t) {
+  t = String(t || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  try { return JSON.parse(t); } catch (e) {}
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {} }
+  return null;
+}
+let claudeMode = 'schema'; // 'schema' (output_config JSON schema) or 'tool' (tool use, auto choice)
+// content: array of Anthropic content blocks. Returns an object shaped like tool.input_schema.
+export async function claudeTool({ system, content, tool, maxTokens = 8000, signal }) {
   if (S.demo) return mock.claudeTool({ tool, content, signal });
   const key = need('anthropic', 'Claude');
-  const body = { model: S.models.claude, max_tokens: maxTokens, system, messages: [{ role: 'user', content }], tools: [tool], tool_choice: { type: 'tool', name: tool.name } };
-  const j = await retry(() => jfetch('Claude', 'https://api.anthropic.com/v1/messages', {
-    method: 'POST', signal,
-    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify(body),
-  }), signal);
-  if (j.usage) addCost('claude', { in: (j.usage.input_tokens || 0) + (j.usage.cache_read_input_tokens || 0), out: j.usage.output_tokens || 0 });
-  const tu = (j.content || []).find(c => c.type === 'tool_use');
-  if (!tu) throw new ApiError('Claude', 200, '想定した形式の返答がありませんでした');
-  return tu.input;
+  const headers = { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+  const send = body => retry(() => jfetch('Claude', 'https://api.anthropic.com/v1/messages', { method: 'POST', signal, headers, body: JSON.stringify(body) }), signal);
+  const base = { model: S.models.claude, max_tokens: maxTokens, messages: [{ role: 'user', content }] };
+  const bodies = {
+    schema: () => ({ ...base, system: `${system}\n\n返答は指定されたJSONスキーマに従うJSONだけにする。（${tool.description}）`, output_config: { format: { type: 'json_schema', schema: strictSchema(tool.input_schema) } } }),
+    tool: () => ({ ...base, system: `${system}\n\n必ず ${tool.name} ツールを1回だけ呼び出して回答する。ツール以外の文章は書かない。`, tools: [tool], tool_choice: { type: 'auto' } }),
+  };
+  let j;
+  try { j = await send(bodies[claudeMode]()); }
+  catch (e) {
+    // this model/account may not accept one of the two structured modes: switch once and remember
+    if (e.status !== 400 || !/output_config|format|schema|tool_choice|tools?\b|not supported/i.test(e.raw || '')) throw e;
+    claudeMode = claudeMode === 'schema' ? 'tool' : 'schema';
+    j = await send(bodies[claudeMode]());
+  }
+  if (j.usage) addCost('claude', { in: (j.usage.input_tokens || 0) + (j.usage.cache_read_input_tokens || 0) + (j.usage.cache_creation_input_tokens || 0), out: j.usage.output_tokens || 0 });
+  const blocks = j.content || [];
+  const tu = blocks.find(c => c.type === 'tool_use');
+  if (tu && tu.input) return tu.input;
+  const text = blocks.filter(c => c.type === 'text').map(c => c.text).join('\n');
+  const obj = parseJsonText(text);
+  if (obj) return obj;
+  if (j.stop_reason === 'max_tokens') throw new ApiError('Claude', 200, '返答が長すぎて途中で切れました。動画の長さを短くするか、もう一度試してください');
+  if (j.stop_reason === 'refusal') throw new ApiError('Claude', 200, 'この依頼内容には対応できないと返答されました。内容を変えて試してください');
+  throw new ApiError('Claude', 200, '想定した形式の返答がありませんでした');
 }
 export const imgBlock = (b64, media = 'image/jpeg') => ({ type: 'image', source: { type: 'base64', media_type: media, data: b64 } });
 export const txt = text => ({ type: 'text', text });
