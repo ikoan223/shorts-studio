@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AIショートスタジオ</title>
+<meta name="description" content="Claude・ChatGPT・Geminiが連携して、字幕付きの縦型ショート動画を自動で作るWebアプリ">
+<meta name="theme-color" content="#2f4bff">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@500&family=Noto+Sans+JP:wght@900&family=M+PLUS+Rounded+1c:wght@800&family=Zen+Maru+Gothic:wght@900&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="brand"><span>AIショート</span>スタジオ</h1>
+    <span class="chip" id="modeChip" hidden>デモモード</span>
+    <nav class="tabs" role="tablist" aria-label="画面の切り替え">
+      <button class="tab" role="tab" data-view="make" aria-selected="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg><span>制作</span></button>
+      <button class="tab" role="tab" data-view="edit" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M10 9l5 3-5 3z"/></svg><span>編集・書き出し</span></button>
+      <button class="tab" role="tab" data-view="settings" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg><span>設定</span></button>
+    </nav>
+  </header>
+
+  <!-- ============ 制作 ============ -->
+  <section class="view" data-view="make">
+    <div class="make">
+      <div class="col">
+        <form class="card brief" id="briefForm" novalidate>
+          <h2>どんなショートを作る？</h2>
+          <textarea id="theme" rows="5" placeholder="例：朝5時起きの作業ルーティンを紹介する30秒ショート。落ち着いたローファイな雰囲気で、最後に「一緒に朝活しよう」と呼びかける。"></textarea>
+          <div class="g3">
+            <label>長さ<select id="len"><option value="15">15秒</option><option value="30" selected>30秒</option><option value="45">45秒</option><option value="60">60秒</option><option value="90">90秒</option></select></label>
+            <label>ナレーションの声<select id="voice"></select></label>
+            <label>動画にするシーン<select id="vids"><option value="0">なし（静止画のみ）</option><option value="1">最大1</option><option value="2" selected>最大2</option><option value="3">最大3</option><option value="4">最大4</option></select></label>
+          </div>
+          <details class="more">
+            <summary>チェック回数と予算</summary>
+            <div class="g3">
+              <label>画像チェック（最大）<select id="assetRounds"><option value="1">1回</option><option value="2" selected>2回</option><option value="3">3回</option><option value="4">4回</option></select></label>
+              <label>最終チェック（最大）<select id="qcRounds"><option value="1">1回</option><option value="2">2回</option><option value="3" selected>3回</option><option value="4">4回</option><option value="5">5回</option></select></label>
+              <label>予算の上限（USD）<input type="number" id="budget" min="0" step="0.5" value="3" inputmode="decimal"></label>
+            </div>
+            <label class="tog"><input type="checkbox" id="autoExport" checked> Claudeが承認したら自動で書き出す</label>
+          </details>
+          <p class="notice" id="keyWarn" hidden>APIキーがまだ入っていません。<button type="button" class="linkish" data-goto="settings">設定</button>で入力するか、<button type="button" class="linkish" id="tryDemo">デモモードで試す</button>（料金はかかりません）。</p>
+          <div class="actions">
+            <button class="btn primary" id="startBtn" type="submit">制作スタート</button>
+            <button class="btn" id="resumeBtn" type="button" hidden>続きから再開</button>
+            <button class="btn danger" id="stopBtn" type="button" hidden>停止</button>
+            <button class="btn ghost" id="newBtn" type="button" hidden>新しく作る</button>
+          </div>
+        </form>
+
+        <div class="card">
+          <ol class="steps" id="steps">
+            <li data-stage="plan"><b>企画・台本</b><small>Claude</small></li>
+            <li data-stage="images"><b>画像の生成とチェック</b><small>ChatGPT ⇄ Claude</small></li>
+            <li data-stage="videos"><b>動画クリップ</b><small>Gemini ⇄ Claude</small></li>
+            <li data-stage="voice"><b>ナレーション</b><small>Gemini</small></li>
+            <li data-stage="qc"><b>最終チェック</b><small>Claude</small></li>
+            <li data-stage="export"><b>書き出し</b><small>この端末</small></li>
+          </ol>
+          <div class="cost">
+            <div class="costrow"><span>費用の目安</span><b id="costNow">$0.00</b><span class="muted" id="costCap">/ 上限 $3.00</span></div>
+            <div class="bar"><i id="costBar"></i></div>
+            <small class="muted" id="costDetail">Claude 0トークン · 画像 0枚 · 動画 0本 · 音声 0文字</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="cardhead"><h2 id="projTitle">シーン</h2><span class="verdict" id="verdictMini" hidden></span></div>
+          <div class="sgrid" id="sgrid"><p class="empty">「制作スタート」を押すと、Claudeが台本を書き、シーンがここに並びます。</p></div>
+        </div>
+        <div class="card">
+          <h2>チームのやりとり</h2>
+          <ol class="log" id="log" aria-live="polite"></ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 編集・書き出し ============ -->
+  <section class="view" data-view="edit" hidden>
+    <div class="edit">
+      <div class="stage">
+        <div class="phone"><div class="screen"><canvas id="pv" width="720" height="1280" aria-label="動画プレビュー"></canvas></div></div>
+        <div class="transport">
+          <button class="play" id="playBtn" aria-label="再生"><svg viewBox="0 0 16 16" id="playIco"><path d="M4 2l10 6-10 6z"/></svg></button>
+          <input type="range" id="seek" min="0" max="1000" value="0" aria-label="再生位置">
+          <span class="tc"><b id="tcNow">0:00.0</b> / <span id="tcAll">0:00.0</span></span>
+        </div>
+        <div class="tl" id="tl" aria-label="シーンのタイムライン"></div>
+        <div class="card verdictCard" id="verdictCard">
+          <div class="vhead"><span class="vbadge" id="vBadge">未チェック</span><b id="vScore"></b></div>
+          <p id="vSummary" class="muted">Claudeの最終チェックはまだです。</p>
+          <button class="btn sm" id="recheckBtn">Claudeにもう一度チェックしてもらう</button>
+        </div>
+        <div class="card exportCard">
+          <h2>書き出し</h2>
+          <div class="g2">
+            <select id="res" aria-label="解像度"><option value="1080">1080×1920（推奨）</option><option value="720">720×1280（速い）</option></select>
+            <select id="fps" aria-label="フレームレート"><option value="30">30fps</option><option value="60">60fps</option></select>
+          </div>
+          <button class="btn primary" id="exportBtn">MP4を書き出す</button>
+          <button class="btn sm ghost" id="forceExport" hidden>承認を待たずに書き出す</button>
+          <div id="prog" hidden><progress id="progBar" max="1" value="0"></progress></div>
+          <p class="status" id="status" aria-live="polite"></p>
+          <button class="btn sm ghost" id="cancelBtn" hidden>中止</button>
+          <div class="result" id="result" hidden>
+            <video id="outVid" controls playsinline></video>
+            <div class="meta" id="outMeta"></div>
+            <div class="g2"><button class="btn primary" id="saveBtn">保存する</button><button class="btn" id="shareBtn" hidden>共有・写真に保存</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="cardhead"><h2>シーン</h2><span class="muted small">変更すると再チェックが必要になります</span></div>
+          <div class="elist" id="elist"></div>
+        </div>
+        <details class="card">
+          <summary><b>字幕の見た目</b></summary>
+          <div class="fields">
+            <div class="field"><label for="font">フォント</label><select id="font">
+              <option value="Noto Sans JP">ゴシック太字</option><option value="M PLUS Rounded 1c">丸ゴシック</option><option value="Zen Maru Gothic">やわらか丸</option><option value="Dela Gothic One">極太</option></select><span></span></div>
+            <div class="field"><label for="size">文字サイズ</label><input type="range" id="size" min="40" max="130" step="2"><output data-for="size"></output></div>
+            <div class="field"><label for="maxChars">1行の最大文字数</label><input type="range" id="maxChars" min="6" max="20" step="1"><output data-for="maxChars"></output></div>
+            <div class="field"><label for="pos">縦位置</label><input type="range" id="pos" min="0.15" max="0.85" step="0.01"><output data-for="pos"></output></div>
+            <div class="field"><label for="color">文字の色</label><input type="color" id="color"><span></span></div>
+            <div class="field"><label for="stroke">フチの色</label><input type="color" id="stroke"><span></span></div>
+            <div class="field"><label for="strokeW">フチの太さ</label><input type="range" id="strokeW" min="0" max="24" step="1"><output data-for="strokeW"></output></div>
+            <div class="field tog"><label for="box">半透明の帯を敷く</label><input type="checkbox" id="box"></div>
+            <div class="field tog"><label for="pop">ポンと出す</label><input type="checkbox" id="pop"></div>
+            <div class="field tog"><label for="hidePeriod">文末の「。」を消す</label><input type="checkbox" id="hidePeriod"></div>
+            <div class="field"><label for="motionAmt">静止画の動き</label><input type="range" id="motionAmt" min="0" max="0.2" step="0.01"><output data-for="motionAmt"></output></div>
+            <div class="field"><label for="fade">切り替えのフェード</label><input type="range" id="fade" min="0" max="1" step="0.05"><output data-for="fade"></output></div>
+            <div class="field"><label for="pad">声のあとの間</label><input type="range" id="pad" min="0" max="1.5" step="0.05"><output data-for="pad"></output></div>
+            <div class="field"><label for="voiceVol">声の音量</label><input type="range" id="voiceVol" min="0" max="2" step="0.05"><output data-for="voiceVol"></output></div>
+          </div>
+        </details>
+        <div class="card bgm">
+          <b>BGM</b><span class="nm" id="bgmName">なし</span>
+          <button class="btn sm" id="bgmBtn">選ぶ</button><button class="btn sm ghost danger" id="bgmDel" hidden>外す</button>
+          <input type="file" id="bgmIn" accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac" hidden>
+          <div class="field bgmvol"><label for="bgmVol">音量</label><input type="range" id="bgmVol" min="0" max="1" step="0.01"><output data-for="bgmVol"></output></div>
+          <label class="tog"><input type="checkbox" id="duck"> 声の間は下げる</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 設定 ============ -->
+  <section class="view" data-view="settings" hidden>
+    <div class="settings">
+      <div class="card">
+        <h2>APIキー</h2>
+        <p class="muted small">キーはこの端末のブラウザにだけ保存され、各社のAPIへ直接送られます。スマホとPCでそれぞれ入力してください。共用の端末では使わないでください。</p>
+        <div class="keys">
+          <label>Claude（Anthropic）<span class="kh"><input type="password" id="k-anthropic" autocomplete="off" spellcheck="false" placeholder="sk-ant-..."><button type="button" class="btn sm ghost" data-eye="k-anthropic">表示</button></span>
+            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">キーを発行する</a></label>
+          <label>ChatGPT（OpenAI）<span class="kh"><input type="password" id="k-openai" autocomplete="off" spellcheck="false" placeholder="sk-..."><button type="button" class="btn sm ghost" data-eye="k-openai">表示</button></span>
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">キーを発行する</a></label>
+          <label>Gemini（Google AI Studio）<span class="kh"><input type="password" id="k-gemini" autocomplete="off" spellcheck="false" placeholder="AIza..."><button type="button" class="btn sm ghost" data-eye="k-gemini">表示</button></span>
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">キーを発行する</a></label>
+        </div>
+        <div class="actions"><button class="btn" id="testKeys" type="button">接続を確認</button><span class="small" id="keyResult"></span></div>
+      </div>
+      <div class="card">
+        <h2>デモモード</h2>
+        <label class="tog"><input type="checkbox" id="demo"> APIを使わずに、流れだけ試す（料金はかかりません）</label>
+      </div>
+      <div class="card">
+        <h2>使うモデル</h2>
+        <p class="muted small">モデルが新しくなったら、ここを書き換えれば対応できます。動画のモデル名が <code>veo</code> で始まる場合はVeoの呼び出し方式に切り替わります。</p>
+        <div class="fields">
+          <div class="field wide"><label for="m-claude">Claude</label><input id="m-claude" list="claudeModels" spellcheck="false"></div>
+          <div class="field wide"><label for="m-image">画像（OpenAI）</label><input id="m-image" list="imageModels" spellcheck="false"></div>
+          <div class="field wide"><label for="m-tts">音声（Gemini）</label><input id="m-tts" list="ttsModels" spellcheck="false"></div>
+          <div class="field wide"><label for="m-video">動画（Gemini）</label><input id="m-video" list="videoModels" spellcheck="false"></div>
+          <div class="field wide"><label for="imageQuality">画像の品質</label><select id="imageQuality"><option value="low">low（安い）</option><option value="medium">medium</option><option value="high">high（高い）</option></select></div>
+          <div class="field wide"><label for="imageSize">画像サイズ</label><select id="imageSize"><option value="864x1536">864×1536（9:16）</option><option value="1152x2048">1152×2048（9:16・高精細）</option><option value="1024x1536">1024×1536（2:3）</option></select></div>
+        </div>
+        <datalist id="claudeModels"><option value="claude-sonnet-5-5"><option value="claude-opus-5-5"><option value="claude-haiku-4-5-20251001"></datalist>
+        <datalist id="imageModels"><option value="gpt-image-2.5-flare"><option value="gpt-image-2.5-sunburst"><option value="gpt-image-2"></datalist>
+        <datalist id="ttsModels"><option value="gemini-3.8-flash-tts"><option value="gemini-3.8-flash-lite-tts"><option value="gemini-3.1-flash-tts-preview"></datalist>
+        <datalist id="videoModels"><option value="gemini-omni-1.1-flash"><option value="gemini-omni-flash-preview"></datalist>
+      </div>
+      <div class="card">
+        <h2>費用の目安の計算</h2>
+        <p class="muted small">Claudeは実際の使用トークンで計算します。画像・動画・音声は1件あたりの目安です。実際の請求は各社の管理画面で確認してください。</p>
+        <div class="fields">
+          <div class="field wide"><label for="p-claudeIn">Claude 入力（$/100万トークン）</label><input type="number" id="p-claudeIn" step="0.1" min="0" inputmode="decimal"></div>
+          <div class="field wide"><label for="p-claudeOut">Claude 出力（$/100万トークン）</label><input type="number" id="p-claudeOut" step="0.1" min="0" inputmode="decimal"></div>
+          <div class="field wide"><label for="p-image">画像1枚（$）</label><input type="number" id="p-image" step="0.01" min="0" inputmode="decimal"></div>
+          <div class="field wide"><label for="p-video">動画1本（$）</label><input type="number" id="p-video" step="0.05" min="0" inputmode="decimal"></div>
+          <div class="field wide"><label for="p-tts">音声1000文字（$）</label><input type="number" id="p-tts" step="0.01" min="0" inputmode="decimal"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>データ</h2>
+        <p class="muted small">作業中の作品（画像・動画・音声）はこの端末に自動保存され、ページを閉じても「続きから再開」できます。</p>
+        <button class="btn danger" id="wipe" type="button">作業中の作品を削除</button>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
