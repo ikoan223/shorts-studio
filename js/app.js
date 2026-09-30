@@ -1,10 +1,10 @@
-import { S, P, saveSettings, newProject, nextId, VERSION, normModel, DEF_SETTINGS } from './state.js?v=2026.09.30-5';
-import * as pipe from './pipeline.js?v=2026.09.30-5';
-import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-5';
-import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-5';
-import { exportVideo } from './export.js?v=2026.09.30-5';
-import { testKeys } from './apis.js?v=2026.09.30-5';
-import { resetMock } from './mock.js?v=2026.09.30-5';
+import { S, P, saveSettings, newProject, nextId, VERSION, normModel, DEF_SETTINGS, MODEL_OPTIONS } from './state.js?v=2026.09.30-6';
+import * as pipe from './pipeline.js?v=2026.09.30-6';
+import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-6';
+import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-6';
+import { exportVideo } from './export.js?v=2026.09.30-6';
+import { testKeys } from './apis.js?v=2026.09.30-6';
+import { resetMock } from './mock.js?v=2026.09.30-6';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -35,7 +35,29 @@ function bindSettings() {
     el.addEventListener('change', () => { S.keys[k] = el.value.trim(); saveSettings(); updateKeyWarn(); });
   }
   $$('[data-eye]').forEach(b => b.addEventListener('click', () => { const i = $('#' + b.dataset.eye); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.textContent = show ? '隠す' : '表示'; }));
-  for (const k of ['claude', 'image', 'tts', 'video']) { const el = $('#m-' + k); el.value = S.models[k]; el.addEventListener('change', () => { S.models[k] = normModel(el.value) || DEF_SETTINGS.models[k]; el.value = S.models[k]; saveSettings(); }); }
+  for (const k of ['claude', 'image', 'tts', 'video']) {
+    const sel = $('#m-' + k + '-sel'), inp = $('#m-' + k), opts = MODEL_OPTIONS[k];
+    sel.innerHTML = opts.map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join('') + '<option value="__custom">その他（モデル名を入力）</option>';
+    const known = opts.some(o => o[0] === S.models[k]);
+    sel.value = known ? S.models[k] : '__custom';
+    inp.hidden = known; inp.value = known ? '' : S.models[k];
+    const setModel = id => {
+      S.models[k] = id;
+      const o = opts.find(x => x[0] === id);
+      if (k === 'claude' && o) { S.prices.claudeIn = o[2]; S.prices.claudeOut = o[3]; $('#p-claudeIn').value = o[2]; $('#p-claudeOut').value = o[3]; }
+      saveSettings();
+    };
+    sel.addEventListener('change', () => {
+      if (sel.value === '__custom') { inp.hidden = false; inp.value = inp.value || S.models[k]; inp.focus(); return; }
+      inp.hidden = true; setModel(sel.value); toast('モデルを変更しました');
+    });
+    inp.addEventListener('change', () => {
+      const v = normModel(inp.value);
+      if (!v) { inp.value = S.models[k]; return; }
+      inp.value = v; setModel(v);
+      if (opts.some(o => o[0] === v)) { sel.value = v; inp.hidden = true; }
+    });
+  }
   for (const k of ['imageQuality', 'imageSize']) { const el = $('#' + k); el.value = S[k]; el.addEventListener('change', () => { S[k] = el.value; saveSettings(); }); }
   for (const k of Object.keys(S.prices)) { const el = $('#p-' + k); if (!el) continue; el.value = S.prices[k]; el.addEventListener('change', () => { const v = parseFloat(el.value); if (v >= 0) S.prices[k] = v; saveSettings(); }); }
   const demo = $('#demo'); demo.checked = S.demo;

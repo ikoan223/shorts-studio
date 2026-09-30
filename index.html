@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@500&family=Noto+Sans+JP:wght@900&family=M+PLUS+Rounded+1c:wght@800&family=Zen+Maru+Gothic:wght@900&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2026.09.30-5">
+<link rel="stylesheet" href="css/app.css?v=2026.09.30-6">
 </head>
 <body>
 <div class="app">
@@ -183,19 +183,15 @@
       </div>
       <div class="card">
         <h2>使うモデル</h2>
-        <p class="muted small">モデルが新しくなったら、ここを書き換えれば対応できます。動画のモデル名が <code>veo</code> で始まる場合はVeoの呼び出し方式に切り替わります。</p>
+        <p class="muted small">リストから選んでください。新しいモデルが出てリストにない場合は「その他」を選ぶと名前を入力できます。</p>
         <div class="fields">
-          <div class="field wide"><label for="m-claude">Claude</label><input id="m-claude" list="claudeModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
-          <div class="field wide"><label for="m-image">画像（OpenAI）</label><input id="m-image" list="imageModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
-          <div class="field wide"><label for="m-tts">音声（Gemini）</label><input id="m-tts" list="ttsModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
-          <div class="field wide"><label for="m-video">動画（Gemini）</label><input id="m-video" list="videoModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
+          <div class="field wide"><label for="m-claude-sel">Claude（台本・チェック）</label><div class="msel"><select id="m-claude-sel"></select><input id="m-claude" hidden spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off" placeholder="モデル名（小文字）" aria-label="Claude（台本・チェック）のモデル名"></div></div>
+          <div class="field wide"><label for="m-image-sel">ChatGPT（画像）</label><div class="msel"><select id="m-image-sel"></select><input id="m-image" hidden spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off" placeholder="モデル名（小文字）" aria-label="ChatGPT（画像）のモデル名"></div></div>
+          <div class="field wide"><label for="m-tts-sel">Gemini（ナレーション）</label><div class="msel"><select id="m-tts-sel"></select><input id="m-tts" hidden spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off" placeholder="モデル名（小文字）" aria-label="Gemini（ナレーション）のモデル名"></div></div>
+          <div class="field wide"><label for="m-video-sel">Gemini（動画）</label><div class="msel"><select id="m-video-sel"></select><input id="m-video" hidden spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off" placeholder="モデル名（小文字）" aria-label="Gemini（動画）のモデル名"></div></div>
           <div class="field wide"><label for="imageQuality">画像の品質</label><select id="imageQuality"><option value="low">low（安い）</option><option value="medium">medium</option><option value="high">high（高い）</option></select></div>
           <div class="field wide"><label for="imageSize">画像サイズ</label><select id="imageSize"><option value="864x1536">864×1536（9:16）</option><option value="1152x2048">1152×2048（9:16・高精細）</option><option value="1024x1536">1024×1536（2:3）</option></select></div>
         </div>
-        <datalist id="claudeModels"><option value="claude-sonnet-5-5"><option value="claude-opus-5-5"><option value="claude-haiku-4-5-20251001"></datalist>
-        <datalist id="imageModels"><option value="gpt-image-2.5-flare"><option value="gpt-image-2.5-sunburst"><option value="gpt-image-2"></datalist>
-        <datalist id="ttsModels"><option value="gemini-3.8-flash-tts"><option value="gemini-3.8-flash-lite-tts"><option value="gemini-3.1-flash-tts-preview"></datalist>
-        <datalist id="videoModels"><option value="gemini-omni-1.1-flash"><option value="gemini-omni-flash-preview"></datalist>
       </div>
       <div class="card">
         <h2>費用の目安の計算</h2>
@@ -218,6 +214,6 @@
   </section>
 </div>
 <div class="toast" id="toast" hidden></div>
-<script type="module" src="js/app.js?v=2026.09.30-5"></script>
+<script type="module" src="js/app.js?v=2026.09.30-6"></script>
 </body>
 </html>

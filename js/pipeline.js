@@ -1,7 +1,7 @@
 // The production loop: Claude plans → ChatGPT draws → Claude reviews (loop) → Gemini animates / voices → Claude QC (loop) → approve.
-import { S, P, newScene } from './state.js?v=2026.09.30-5';
-import * as api from './apis.js?v=2026.09.30-5';
-import { buildTimeline, TL, makeBlur, decodeAudio, loadVideoEl, snapshot, lineCount, speechLen, ensureFonts } from './render.js?v=2026.09.30-5';
+import { S, P, newScene } from './state.js?v=2026.09.30-6';
+import * as api from './apis.js?v=2026.09.30-6';
+import { buildTimeline, TL, makeBlur, decodeAudio, loadVideoEl, snapshot, lineCount, speechLen, ensureFonts } from './render.js?v=2026.09.30-6';
 
 const MOTIONS = ['zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'static'];
 export class StopError extends Error {}

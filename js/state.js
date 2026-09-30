@@ -1,4 +1,4 @@
-export const VERSION = '2026.09.30-5';
+export const VERSION = '2026.09.30-6';
 // Settings (per device, localStorage) and the current project.
 export const DEF_STYLE = {
   font: 'Noto Sans JP', size: 78, maxChars: 12, pos: 0.66, color: '#ffffff', stroke: '#111111', strokeW: 12,
@@ -34,6 +34,30 @@ export const S = load();
 for (const k in S.models) S.models[k] = normModel(S.models[k]) || DEF_SETTINGS.models[k];
 for (const k in S.keys) S.keys[k] = String(S.keys[k] || '').trim();
 export function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+// Choices shown in Settings. [id, label]; Claude entries also carry $ per 1M tokens (input, output).
+export const MODEL_OPTIONS = {
+  claude: [
+    ['claude-sonnet-5-5', 'Claude Sonnet 5.5（おすすめ・バランス型）', 2, 10],
+    ['claude-opus-5-5', 'Claude Opus 5.5（高品質・費用2倍）', 4, 20],
+    ['claude-haiku-4-5-20251001', 'Claude Haiku 4.5（速い・安い）', 1, 5],
+    ['claude-fable-5-1', 'Claude Fable 5.1（最高性能・費用5倍）', 10, 50],
+  ],
+  image: [
+    ['gpt-image-2.5-flare', 'GPT Image 2.5 Flare（おすすめ・速い）'],
+    ['gpt-image-2.5-sunburst', 'GPT Image 2.5 Sunburst（仕上がり重視・やや遅い）'],
+    ['gpt-image-2', 'GPT Image 2（ひとつ前・安い）'],
+  ],
+  tts: [
+    ['gemini-3.8-flash-tts', 'Gemini 3.8 Flash TTS（おすすめ）'],
+    ['gemini-3.8-flash-lite-tts', 'Gemini 3.8 Flash-Lite TTS（速い・安い）'],
+    ['gemini-3.1-flash-tts-preview', 'Gemini 3.1 Flash TTS プレビュー（旧版）'],
+  ],
+  video: [
+    ['gemini-omni-1.1-flash', 'Gemini Omni 1.1 Flash（おすすめ）'],
+    ['gemini-omni-flash-preview', 'Gemini Omni Flash プレビュー版'],
+  ],
+};
 
 let uid = Date.now() % 1e6;
 export const nextId = () => ++uid;

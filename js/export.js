@@ -1,7 +1,7 @@
 // MP4 export: WebCodecs (H.264/AAC, fallback VP9/Opus) + a small ISO-BMFF muxer.
 // Falls back to real-time MediaRecorder where WebCodecs is missing.
-import { S } from './state.js?v=2026.09.30-5';
-import { TL, W0, drawFrame, prepareFrame, getMix, AC, ensureFonts, stopAllVideos } from './render.js?v=2026.09.30-5';
+import { S } from './state.js?v=2026.09.30-6';
+import { TL, W0, drawFrame, prepareFrame, getMix, AC, ensureFonts, stopAllVideos } from './render.js?v=2026.09.30-6';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

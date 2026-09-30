@@ -204,6 +204,8 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
 .keys label{color:var(--ink);font-weight:500}
 .keys a{font-size:.8rem;color:var(--accent);font-weight:400}
 .kh{display:flex;gap:6px}
+.msel{display:grid;gap:6px;min-width:0}
+.msel input{font-family:var(--f-mono);font-size:.85rem}
 .kh input{font-family:var(--f-mono);font-size:.85rem}
 
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.88rem;max-width:calc(100% - 32px);box-shadow:0 10px 30px -10px rgba(0,0,0,.5);z-index:30}
