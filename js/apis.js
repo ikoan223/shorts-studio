@@ -1,6 +1,6 @@
 // Direct browser calls to Anthropic (Claude), OpenAI (images) and Google Gemini (voice, video).
-import { S, P } from './state.js?v=2026.09.30-6';
-import * as mock from './mock.js?v=2026.09.30-6';
+import { S, P } from './state.js?v=2026.09.30-7';
+import * as mock from './mock.js?v=2026.09.30-7';
 
 export class ApiError extends Error {
   constructor(provider, status, message) { super(`${provider}: ${message}`); this.provider = provider; this.status = status; this.raw = message; }

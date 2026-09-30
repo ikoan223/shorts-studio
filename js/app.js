@@ -1,10 +1,10 @@
-import { S, P, saveSettings, newProject, nextId, VERSION, normModel, DEF_SETTINGS, MODEL_OPTIONS } from './state.js?v=2026.09.30-6';
-import * as pipe from './pipeline.js?v=2026.09.30-6';
-import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-6';
-import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-6';
-import { exportVideo } from './export.js?v=2026.09.30-6';
-import { testKeys } from './apis.js?v=2026.09.30-6';
-import { resetMock } from './mock.js?v=2026.09.30-6';
+import { S, P, saveSettings, newProject, nextId, VERSION, normModel, DEF_SETTINGS, MODEL_OPTIONS, TELOP_FONTS, TRANSITIONS } from './state.js?v=2026.09.30-7';
+import * as pipe from './pipeline.js?v=2026.09.30-7';
+import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-7';
+import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio, sceneStyle } from './render.js?v=2026.09.30-7';
+import { exportVideo } from './export.js?v=2026.09.30-7';
+import { testKeys } from './apis.js?v=2026.09.30-7';
+import { resetMock } from './mock.js?v=2026.09.30-7';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -76,6 +76,7 @@ function bindSettings() {
     await clearProject(); P.cur = null; renderAll(); toast('削除しました');
   });
   // subtitle / audio style
+  $('#font').innerHTML = TELOP_FONTS.map(f => `<option value="${f[0]}">${f[0]}（${f[2].split('。')[0]}）</option>`).join('');
   const OUT = { size: v => v + 'px', maxChars: v => v + '字', pos: v => Math.round(v * 100) + '%', strokeW: v => v + 'px', motionAmt: v => Math.round(v * 100) + '%', fade: v => (+v).toFixed(2) + 's', pad: v => (+v).toFixed(2) + 's', voiceVol: v => Math.round(v * 100) + '%', bgmVol: v => Math.round(v * 100) + '%' };
   for (const k of Object.keys(S.style)) {
     const el = document.getElementById(k); if (!el) continue;
@@ -124,7 +125,7 @@ function releaseWake() { try { wake && wake.release(); } catch (e) {} wake = nul
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running && !wake) lockWake(); });
 window.addEventListener('beforeunload', e => { if (running || exporting) { e.preventDefault(); e.returnValue = ''; } });
 
-const ORDER = ['plan', 'images', 'videos', 'voice', 'qc', 'export'];
+const ORDER = ['plan', 'images', 'videos', 'voice', 'direct', 'qc', 'export'];
 const callbacks = {
   log: addLog,
   update: () => scheduleRender(),
@@ -139,8 +140,9 @@ async function runPipeline(fn) {
   try { ok = await fn(callbacks, ctl.signal); } finally {
     running = false; ctl = null; releaseWake(); updateButtons(); renderAll(); await saveProject();
   }
-  if (ok && P.cur.brief.autoExport) { showView('edit'); await doExport(false); }
-  else if (ok) toast('Claudeが承認しました。編集タブで書き出せます');
+  if (ok && P.cur.approved && P.cur.brief.autoExport) { showView('edit'); await doExport(false); }
+  else if (ok && P.cur.approved) toast('Claudeが承認しました。編集タブで書き出せます');
+  else if (ok && fn === pipe.redirect) toast('演出を更新しました。書き出す前に再チェックしてください');
 }
 $('#briefForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -180,6 +182,7 @@ function updateButtons() {
   $('#startBtn').disabled = running;
   ['#theme', '#len', '#voice', '#vids'].forEach(s => $(s).disabled = running || has);
   $('#recheckBtn').disabled = running || !pr || !pr.scenes.length;
+  $('#redirectBtn').disabled = running || !pr || !pr.scenes.length;
   updateExportGate();
 }
 
@@ -301,7 +304,7 @@ function refreshEdit(structural) {
   if (pos > TL.total) pos = TL.total;
   $('#tcAll').textContent = fmt(TL.total);
   $('#tl').innerHTML = TL.items.map((e, i) => `<div class="blk ${e.s.visual === 'video' ? 'vid' : ''}" style="flex-grow:${Math.max(0.05, e.len).toFixed(3)}">${i + 1}</div>`).join('') + '<div class="ph"></div>';
-  const sig = scenes().map(s => [s.id, s.thumb, s.visual, s.imgStatus, s.audioStatus, s.videoStatus, !!s.audioBlob, s.stale].join(',')).join('|') + (running ? 'R' : '');
+  const sig = scenes().map(s => [s.id, s.thumb, s.visual, s.imgStatus, s.audioStatus, s.videoStatus, !!s.audioBlob, s.stale, JSON.stringify(s.telop), s.transition && s.transition.type, (s.emphasis || []).join('/')].join(',')).join('|') + (running ? 'R' : '') + S.style.useDirection;
   if (structural && sig !== lastSig) { renderEditor(); lastSig = sig; }
   updateMeta(); renderVerdict(); draw();
   clearTimeout(refreshEdit.ft);
@@ -332,12 +335,22 @@ function renderEditor() {
           <button class="btn sm" data-act="img" ${busy ? 'disabled' : ''}>画像を作り直す</button>
           <button class="btn sm" data-act="kind" ${busy || !s.imgBlob ? 'disabled' : ''}>${s.visual === 'video' ? '静止画にする' : '動画にする'}</button>
         </div>
+        <div class="look">${lookHtml(s, i, busy)}</div>
         <details><summary>画像の指示（英語）${s.visual === 'video' ? 'と動きの指示' : ''}</summary>
           <textarea data-act="prompt" aria-label="画像の指示">${esc(s.image_prompt)}</textarea>
           ${s.visual === 'video' ? `<textarea data-act="vprompt" aria-label="動きの指示">${esc(s.video_prompt)}</textarea>` : ''}
         </details>
       </div>
     </article>`).join('');
+}
+function lookHtml(s, i, busy) {
+  const y = sceneStyle(s);
+  const tr = s.transition ? s.transition.type : 'dissolve';
+  const sel = i === 0 ? '' : `<label>切り替え <select data-act="trans" ${busy ? 'disabled' : ''}>${TRANSITIONS.map(t => `<option value="${t[0]}" ${t[0] === tr ? 'selected' : ''}>${esc(t[1].split('（')[0])}</option>`).join('')}</select></label>`;
+  const who = S.style.useDirection && s.telop ? 'Claudeの演出' : '基本設定';
+  return `<span>テロップ（${who}）:</span><span class="fontchip" style="font-family:'${esc(y.font)}',sans-serif;color:${y.color};-webkit-text-stroke:1px ${y.stroke};background:${y.box === 'accent' ? y.accent : 'var(--bg)'}">${esc(y.font)}</span>`
+    + `<span class="sw" style="background:${y.color}" title="文字色"></span><span class="sw" style="background:${y.stroke}" title="縁取り"></span><span class="sw" style="background:${y.accent}" title="強調色"></span>`
+    + (S.style.useDirection && s.emphasis && s.emphasis.length ? `<span>強調: ${s.emphasis.map(esc).join('・')}</span>` : '') + sel;
 }
 function updateMeta() { $$('#elist .es').forEach((el, i) => { const e = TL.items[i]; const tc = el.querySelector('[data-tc]'); if (e && tc) tc.textContent = `${fmt(e.start)}–${fmt(e.end)}${e.s.audio ? '' : ' 音声なし'}`; }); }
 function markChanged() { if (!P.cur) return; if (P.cur.approved) addLog('system', '内容を変更したので、書き出す前にClaudeの再チェックが必要です。', 'info'); P.cur.approved = false; if (P.cur.verdict) P.cur.verdict.stale = true; if (P.cur.stage === 'done' || P.cur.stage === 'exported') P.cur.stage = 'unapproved'; renderVerdict(); renderMake(); updateButtons(); }
@@ -366,6 +379,13 @@ $('#elist').addEventListener('click', e => {
     else single(async () => { s.visual = 'video'; if (!s.video_prompt) s.video_prompt = 'Subtle natural motion, slow cinematic camera push-in.'; addLog('gemini', `シーン${i + 1}を動画にしています…`, 'work'); await pipe.genVideo(s); if (s.videoStatus === 'failed') { s.visual = 'image'; toast('動画を作れませんでした'); } markChanged(); });
   }
 });
+$('#elist').addEventListener('change', e => {
+  const t = e.target; if (t.dataset.act !== 'trans') return;
+  const s = scenes()[+t.closest('.es').dataset.i]; if (!s) return;
+  s.transition = { type: t.value, duration: (s.transition && s.transition.duration) || 0.5 };
+  if (!S.style.useDirection) { S.style.useDirection = true; $('#useDirection').checked = true; saveSettings(); }
+  refreshEdit(false); saveProject();
+});
 $('#elist').addEventListener('input', e => {
   const t = e.target; if (t.tagName !== 'TEXTAREA') return;
   const s = scenes()[+t.closest('.es').dataset.i]; if (!s) return;
@@ -391,6 +411,11 @@ $('#recheckBtn').addEventListener('click', () => {
   for (const s of P.cur.scenes) if (s.stale) { s.audioBlob = null; s.audio = null; s.audioStatus = 'pending'; s.stale = false; }
   lastSig = '';
   runPipeline(pipe.recheck);
+});
+$('#redirectBtn').addEventListener('click', () => {
+  if (!P.cur || running || !P.cur.scenes.length) return;
+  lastSig = '';
+  runPipeline(pipe.redirect);
 });
 
 /* ---------- export ---------- */
@@ -463,7 +488,7 @@ bindSettings(); updateKeyWarn(); $('#ver').textContent = VERSION;
   const pr = await loadProject();
   if (pr) {
     P.cur = pr;
-    if (['plan', 'images', 'videos', 'voice', 'qc'].includes(pr.stage)) pr.stage = 'stopped';
+    if (['plan', 'images', 'videos', 'voice', 'direct', 'qc'].includes(pr.stage)) pr.stage = 'stopped';
     if (pr.stage === 'exporting') pr.stage = pr.approved ? 'done' : 'unapproved';
     fillBrief(pr.brief);
   }

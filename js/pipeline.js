@@ -1,9 +1,10 @@
 // The production loop: Claude plans → ChatGPT draws → Claude reviews (loop) → Gemini animates / voices → Claude QC (loop) → approve.
-import { S, P, newScene } from './state.js?v=2026.09.30-6';
-import * as api from './apis.js?v=2026.09.30-6';
-import { buildTimeline, TL, makeBlur, decodeAudio, loadVideoEl, snapshot, lineCount, speechLen, ensureFonts } from './render.js?v=2026.09.30-6';
+import { S, P, newScene, TELOP_FONTS, TRANSITIONS, TELOP_ANIMS } from './state.js?v=2026.09.30-7';
+import * as api from './apis.js?v=2026.09.30-7';
+import { buildTimeline, TL, makeBlur, decodeAudio, loadVideoEl, snapshot, lineCount, speechLen, ensureFonts, sceneStyle, transOf } from './render.js?v=2026.09.30-7';
 
 const MOTIONS = ['zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'static'];
+const ROLES = ['hook', 'main', 'support', 'ending'];
 export class StopError extends Error {}
 class BudgetError extends Error {}
 
@@ -55,7 +56,7 @@ export async function genImage(s) {
   guard(S.prices.image);
   s.imgStatus = 'generating'; ui.update();
   const style = P.cur.plan && P.cur.plan.style_bible ? `\n\nStyle guide (keep consistent): ${P.cur.plan.style_bible}` : '';
-  const prompt = `${s.image_prompt}${style}\n\nVertical 9:16 composition for a smartphone short video. Keep the main subject in the upper and middle area; keep the lower-middle band (about 60–75% from the top) calm because subtitles will be overlaid. No text, letters, logos, captions or watermarks in the image.`;
+  const prompt = `${s.image_prompt}${style}\n\nVertical 9:16 composition for a smartphone short video. High-end, professional quality: sharp focus, rich detail and texture, intentional lighting with depth, clean composition with a clear focal point, no generic stock-photo look. Keep the main subject in the upper and middle area; keep the lower-middle band (about 60–75% from the top) calm because subtitles will be overlaid. No text, letters, numbers, user-interface screens with readable writing, logos, captions or watermarks in the image.`;
   try {
     const blob = await api.openaiImage(prompt, signal);
     await setImageBlob(s, blob);
@@ -71,7 +72,7 @@ export async function genImage(s) {
 export async function genVideo(s) {
   guard(S.prices.video);
   s.videoStatus = 'generating'; ui.update();
-  const secs = Math.min(8, Math.max(3, Math.ceil(speechLen(s) + S.style.pad)));
+  const secs = Math.min(10, Math.max(3, Math.ceil(speechLen(s) + S.style.pad + 0.5)));
   const prompt = `${s.video_prompt || 'Subtle natural motion, slow cinematic camera push-in.'}\n\nAnimate this still image into about ${secs} seconds of vertical 9:16 video. Keep the same subjects, style and colors. No text or captions. No sudden cuts.`;
   try {
     const blob = await api.geminiVideo(prompt, s.imgBlob, secs, signal);
@@ -106,6 +107,28 @@ const sceneProps = {
   visual: { type: 'string', enum: ['image', 'video'] },
   video_prompt: { type: 'string', description: 'English. Motion for the video generator (only when visual is video)' },
   motion: { type: 'string', enum: MOTIONS, description: '静止画に付ける動き' },
+  role: { type: 'string', enum: ROLES, description: 'hook=冒頭のつかみ / main=本編の核心 / support=補足・つなぎ / ending=締め' },
+};
+const FONT_NAMES = TELOP_FONTS.map(f => f[0]);
+const TELOP_SCHEMA = {
+  type: 'object', description: 'このシーンのテロップの見た目',
+  properties: {
+    font: { type: 'string', enum: FONT_NAMES },
+    color: { type: 'string', description: '文字色 #RRGGBB' },
+    stroke: { type: 'string', description: '縁取りの色 #RRGGBB' },
+    stroke2: { type: 'string', description: '外側の2重縁取りの色 #RRGGBB（使わないなら空文字）' },
+    accent: { type: 'string', description: '強調語の色 #RRGGBB' },
+    size: { type: 'number', description: '基準サイズに対する倍率 0.8〜1.4' },
+    pos: { type: 'string', enum: ['top', 'upper', 'center', 'lower', 'bottom'] },
+    anim: { type: 'string', enum: TELOP_ANIMS.map(a => a[0]) },
+    box: { type: 'string', enum: ['none', 'dark', 'accent'] },
+  },
+  required: ['font', 'color', 'stroke', 'accent', 'size', 'pos', 'anim', 'box'],
+};
+const TRANS_SCHEMA = {
+  type: 'object', description: 'このシーンに入るときの切り替え効果',
+  properties: { type: { type: 'string', enum: TRANSITIONS.map(t => t[0]) }, duration: { type: 'number', description: '秒 0.2〜1.0' } },
+  required: ['type', 'duration'],
 };
 const PLAN_TOOL = {
   name: 'submit_plan', description: 'ショート動画の企画・台本・素材指示を提出する',
@@ -116,7 +139,7 @@ const PLAN_TOOL = {
       hook: { type: 'string', description: '冒頭2秒のつかみの狙い' },
       style_bible: { type: 'string', description: 'English. Art style, palette, lighting and exact appearance of any recurring character, shared by every image' },
       voice_style: { type: 'string', description: 'ナレーションの読み方（日本語。例: 落ち着いた声で、やや明るく）' },
-      scenes: { type: 'array', items: { type: 'object', properties: sceneProps, required: ['narration', 'image_prompt', 'visual', 'motion'] } },
+      scenes: { type: 'array', items: { type: 'object', properties: sceneProps, required: ['narration', 'image_prompt', 'visual', 'motion', 'role'] } },
     },
     required: ['title', 'style_bible', 'voice_style', 'scenes'],
   },
@@ -154,7 +177,7 @@ const VIDEO_TOOL = {
     required: ['reviews'],
   },
 };
-const FIX_ACTIONS = ['regenerate_image', 'regenerate_video', 'rewrite_narration', 'regenerate_voice', 'change_motion', 'use_image', 'remove_scene'];
+const FIX_ACTIONS = ['regenerate_image', 'regenerate_video', 'rewrite_narration', 'regenerate_voice', 'change_motion', 'use_image', 'remove_scene', 'restyle_telop', 'change_transition'];
 const QC_TOOL = {
   name: 'submit_qc', description: '完成版の品質チェック結果を提出する',
   input_schema: {
@@ -167,6 +190,7 @@ const QC_TOOL = {
         scene: { type: 'integer' }, action: { type: 'string', enum: FIX_ACTIONS }, reason: { type: 'string' },
         new_image_prompt: { type: 'string' }, new_video_prompt: { type: 'string' }, new_narration: { type: 'string' },
         voice_style: { type: 'string' }, motion: { type: 'string', enum: MOTIONS },
+        telop: TELOP_SCHEMA, emphasis: { type: 'array', items: { type: 'string' } }, transition: TRANS_SCHEMA,
       }, required: ['scene', 'action', 'reason'] } },
     },
     required: ['approved', 'score', 'summary', 'fixes'],
@@ -177,6 +201,23 @@ const SYS_BASE = `あなたはYouTubeショート動画の制作チームで、�
 - 動画は縦型9:16、日本語ナレーション付き。ナレーションはそのまま字幕として画面に表示される。
 - 実在の人物、既存のキャラクター、ブランドやロゴは使わない。
 - 返答は必ず指定されたツールで行う。`;
+
+// How many scenes become video, and which: hook and main scenes first, then Claude's other picks.
+function vmaxRule(b) {
+  const v = +b.videoScenes || 0;
+  if (v === 0) return '今回は動画を使わないので visual はすべて image にする。';
+  if (v >= 99) return 'role が hook と main のシーンは visual を video にする（大事なシーンは動画で見せる）。support と ending は image でよい。';
+  return `visual を video にするのは最大${v}シーン。hook と main のうち、動きで一番伝わるシーンを優先する。`;
+}
+function pickVideoScenes(scenes, vmax) {
+  if (vmax <= 0) { scenes.forEach(s => s.visual = 'image'); return 0; }
+  const rank = s => (s.role === 'hook' ? 0 : s.role === 'main' ? 1 : 3) + (s.visual === 'video' ? 0 : 1);
+  const cands = scenes.filter(s => s.visual === 'video' || s.role === 'hook' || s.role === 'main')
+    .map((s, i) => [s, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(x => x[0]);
+  const chosen = new Set(cands.slice(0, vmax >= 99 ? cands.length : vmax));
+  scenes.forEach(s => { s.visual = chosen.has(s) ? 'video' : 'image'; if (s.visual === 'video' && !s.video_prompt) s.video_prompt = 'Cinematic, natural motion of the main subject with a slow camera push-in.'; });
+  return chosen.size;
+}
 
 async function planStep() {
   const b = P.cur.brief;
@@ -189,17 +230,20 @@ async function planStep() {
 - 目標の長さは約${b.length}秒。日本語ナレーションは1秒あたり約6文字で計算し、合計が目標に収まるようにする。
 - 最初の2秒で興味を引くフックを置く。最後は余韻か行動の呼びかけで締める。
 - シーン数は4〜10。1シーンは2〜7秒、ナレーションは短い話し言葉で1〜2文。
-- image_prompt は英語で、それ単体で通じる完全な指示にする。style_bible の画風・色・登場人物の外見を毎回書き込む。画像内に文字を入れない。
-- visual を 'video' にするのは、動きがあると明らかに良くなるシーンだけ。最大${b.videoScenes}シーン${+b.videoScenes === 0 ? '（今回はすべて image）' : ''}。video のシーンにはカメラや被写体の動きを英語で video_prompt に書く。`,
+- 各シーンに role を付ける。hook=冒頭のつかみ、main=本編の核心（伝えたい中身そのもの）、support=補足・つなぎ、ending=締め。
+- image_prompt は英語で60〜120語。それ単体で通じる完全な指示にし、被写体・状況・構図（カメラ位置、画角）・光・色・質感・雰囲気・画風を具体的に書く。style_bible の画風・色・登場人物の外見を毎回書き込む。
+- 画像生成AIは文字や操作画面を正しく描けない。画像内に文字・数字・読める画面を入れず、内容は人物の表情や手元、物、光、比喩的な情景で表現する（例: 編集ソフトの解説なら、モニターの光に照らされた手元や、きらめく光の粒のような抽象表現）。
+- ${vmaxRule(b)}video のシーンには、カメラや被写体の動きを英語で video_prompt に具体的に書く。`,
     content: [api.txt(`依頼内容:\n${b.theme}\n\n目標の長さ: 約${b.length}秒\nナレーションの声: ${b.voice}`)],
   });
   check();
-  const vmax = +b.videoScenes || 0; let vcount = 0;
   P.cur.plan = { title: plan.title || '無題', hook: plan.hook || '', style_bible: plan.style_bible || '', voice_style: plan.voice_style || '' };
   P.cur.scenes = (plan.scenes || []).map(sc => newScene({
     narration: String(sc.narration || '').trim(), image_prompt: sc.image_prompt || '', video_prompt: sc.video_prompt || '',
-    visual: sc.visual === 'video' && vcount++ < vmax ? 'video' : 'image', motion: MOTIONS.includes(sc.motion) ? sc.motion : 'zoom_in',
+    visual: sc.visual === 'video' ? 'video' : 'image', motion: MOTIONS.includes(sc.motion) ? sc.motion : 'zoom_in',
+    role: ROLES.includes(sc.role) ? sc.role : 'main',
   })).filter(s => s.narration && s.image_prompt);
+  const vcount = pickVideoScenes(P.cur.scenes, +b.videoScenes || 0);
   if (!P.cur.scenes.length) throw new Error('台本を作れませんでした。依頼内容を具体的にして、もう一度試してください。');
   const est = P.cur.scenes.reduce((a, s) => a + [...s.narration].length, 0) / 6;
   ui.log('claude', `「${P.cur.plan.title}」の台本ができました。${P.cur.scenes.length}シーン、約${Math.round(est)}秒${vcount ? `、うち${vcount}シーンを動画にします` : ''}。ChatGPTに画像を依頼します。`, 'done');
@@ -230,7 +274,8 @@ async function imageLoop() {
       signal, tool: REVIEW_TOOL, maxTokens: 5000,
       system: SYS_BASE + `
 画像チェックのルール:
-- ナレーションの内容と合っているか、シーン間で画風や登場人物が揃っているか、手や顔の崩れ・読めない文字・透かしがないか、縦長で主題が収まり字幕帯（上から60〜75%付近）がうるさくないかを見る。
+- 次の点を厳しめに見る: ナレーションの内容と合っているか／シーン間で画風や登場人物が揃っているか／手や顔の崩れ・読めない文字や画面・透かしがないか／ぼやけ、のっぺりした質感、情報量の少なさ、安っぽいストック写真感など品質が低くないか／縦長で主題が収まり字幕帯（上から60〜75%付近）がうるさくないか。
+- 特に role が hook と main のシーンは、見る人の目を止める完成度が必要。物足りなければ、より具体的で魅力的な new_image_prompt を書いて作り直す。
 - 細かい好みでは作り直さない。明らかな問題があるときだけ regenerate にし、何を直すか new_image_prompt に反映する。
 - focus_x / focus_y には、縦型にトリミングしたとき中心にしたい主題の位置を入れる。
 ${last ? '- これが最後のチェック。生成に失敗したシーン以外は ok にし、add_scenes は使わない。' : ''}`,
@@ -280,7 +325,13 @@ async function videoLoop() {
     const todo = vids().filter(s => !s.videoBlob || s.videoStatus === 'failed' || s.videoRegen);
     if (todo.length) {
       ui.log('gemini', `${todo.length}シーンを動画にしています（1本数十秒〜数分かかります）…`, 'work');
-      await pool(todo, 2, async s => { s.videoRegen = false; await genVideo(s); });
+      let skipped = 0;
+      await pool(todo, 2, async s => {
+        s.videoRegen = false;
+        try { await genVideo(s); }
+        catch (e) { if (e instanceof BudgetError) { s.visual = 'image'; s.videoStatus = 'none'; skipped++; } else throw e; }
+      });
+      if (skipped) ui.log('system', `予算の上限に近いため、${skipped}シーンは動画にせず静止画にしました。`, 'warn');
       await ui.save();
     }
     for (const s of vids()) if (s.videoStatus === 'failed' && s.videoAttempts >= 2) { s.visual = 'image'; ui.log('system', `シーン${sceneNo(s)}は静止画に切り替えました。`, 'info'); }
@@ -334,6 +385,8 @@ async function applyFixes(fixes) {
       case 'regenerate_voice': if (f.voice_style) s.voiceStyle = f.voice_style; s.audioBlob = null; s.audio = null; s.audioStatus = 'pending'; break;
       case 'change_motion': if (MOTIONS.includes(f.motion)) s.motion = f.motion; break;
       case 'use_image': s.visual = 'image'; break;
+      case 'restyle_telop': if (f.telop) s.telop = cleanTelop(f.telop, s.telop); if (Array.isArray(f.emphasis)) s.emphasis = f.emphasis.slice(0, 4); break;
+      case 'change_transition': if (f.transition) s.transition = cleanTrans(f.transition); break;
       case 'remove_scene': removals.push(s); break;
     }
     byScene.set(s, true);
@@ -345,6 +398,80 @@ async function applyFixes(fixes) {
   if (vids.length) { ui.log('gemini', `${vids.length}本の動画を作り直しています…`, 'work'); await pool(vids, 2, async s => { s.videoRegen = false; await genVideo(s); s.videoReviewed = true; if (s.videoStatus === 'failed') s.visual = 'image'; }); }
   const voices = P.cur.scenes.filter(s => !s.audioBlob);
   if (voices.length) { ui.log('gemini', `${voices.length}シーンのナレーションを録り直しています…`, 'work'); await pool(voices, 3, genVoice); }
+  ui.update(); await ui.save();
+}
+
+/* ---------- telop & transition direction ---------- */
+const DIRECT_TOOL = {
+  name: 'submit_direction', description: 'テロップの見た目・強調語・シーンの切り替え効果を提出する',
+  input_schema: {
+    type: 'object',
+    properties: {
+      concept: { type: 'string', description: 'テロップと切り替えの演出方針（日本語で1〜2文）' },
+      scenes: { type: 'array', items: { type: 'object', properties: {
+        scene: { type: 'integer', description: 'シーン番号（1始まり）' },
+        telop: TELOP_SCHEMA,
+        emphasis: { type: 'array', items: { type: 'string' }, description: 'ナレーション中の強調したい語（そのまま含まれる文字列、0〜3個）' },
+        transition: TRANS_SCHEMA,
+      }, required: ['scene', 'telop', 'emphasis', 'transition'] } },
+    },
+    required: ['concept', 'scenes'],
+  },
+};
+const hex = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c.trim()) ? c.trim() : '';
+function cleanTelop(t, prev) {
+  const o = { ...(prev || {}) };
+  if (FONT_NAMES.includes(t.font)) o.font = t.font;
+  for (const k of ['color', 'stroke', 'accent']) if (hex(t[k])) o[k] = hex(t[k]);
+  if ('stroke2' in t) o.stroke2 = hex(t.stroke2);
+  if (+t.size) o.size = Math.min(1.5, Math.max(0.75, +t.size));
+  if (['top', 'upper', 'center', 'lower', 'bottom'].includes(t.pos)) o.pos = t.pos;
+  if (TELOP_ANIMS.some(a => a[0] === t.anim)) o.anim = t.anim;
+  if (['none', 'dark', 'accent'].includes(t.box)) o.box = t.box;
+  return o;
+}
+function cleanTrans(t) {
+  const type = TRANSITIONS.some(x => x[0] === t.type) ? t.type : 'dissolve';
+  return { type, duration: Math.min(1.2, Math.max(0.2, +t.duration || 0.5)) };
+}
+export function describeTelop(s) {
+  const y = sceneStyle(s);
+  return `${y.font}／文字${y.color}／縁${y.stroke}${y.stroke2 ? '＋外縁' + y.stroke2 : ''}／強調${y.accent}${s.emphasis && s.emphasis.length ? '「' + s.emphasis.join('」「') + '」' : ''}／${y.anim}／帯${y.box}`;
+}
+async function directStep() {
+  check();
+  ui.log('claude', 'テロップのデザインと切り替え演出を考えています…', 'work');
+  guard(0.06);
+  buildTimeline(P.cur.scenes);
+  const content = [api.txt(`作品: ${P.cur.plan.title}\n依頼: ${P.cur.brief.theme}\nstyle_bible: ${P.cur.plan.style_bible}\n\n使えるフォント:\n${TELOP_FONTS.map(f => `- ${f[0]}: ${f[2]}`).join('\n')}\n使える切り替え:\n${TRANSITIONS.map(t => `- ${t[0]}: ${t[1]}`).join('\n')}\nテロップの動き:\n${TELOP_ANIMS.map(a => `- ${a[0]}: ${a[1]}`).join('\n')}\n\n各シーンの映像（字幕なし）とナレーション:`)];
+  for (let i = 0; i < P.cur.scenes.length; i++) {
+    const s = P.cur.scenes[i];
+    content.push(api.txt(`シーン${i + 1}（${s.role}, ${s.visual === 'video' ? '動画' : '静止画'}, ${TL.items[i] ? TL.items[i].len.toFixed(1) : '?'}秒）ナレーション: ${s.narration}`));
+    if (s.img) content.push(api.imgBlock(smallJpeg(s.img, 288)));
+  }
+  const d = await api.claudeTool({
+    signal, tool: DIRECT_TOOL, maxTokens: 6000,
+    system: SYS_BASE + `
+あなたはショート動画のテロップデザイナー兼編集者でもある。視聴者の目を引き、最後まで見たくなる演出を付ける。
+演出のルール:
+- 作品全体で統一感のある基本デザイン（フォント・配色）を決めたうえで、role ごとに強弱を付ける。hook は最も派手に（大きめ、インパクトのあるフォント、zoom や shake）、main は読みやすさとメリハリ、ending は落ち着いた締め。
+- すべて同じ色・同じフォントにしない。ただし1本で使うフォントは2〜3種類までにする。
+- 背景の画像の色と明るさを見て、文字が必ず読めるコントラストにする（明るい背景には濃い縁取りや帯）。主題の顔や物に重ならない pos を選ぶ。bottom は画面下のUIと重なりやすいので避け、通常は lower。
+- emphasis にはナレーションに実際に含まれる語を入れる（キーワード、数字、感情語）。accent は文字色と明確に違う目立つ色。
+- 切り替えは内容の区切りに合わせて選ぶ。通常の流れは dissolve（0.4〜0.6秒）、話題の転換は dip_black や slide、驚きや強調は flash や zoom。毎回同じにしない。1シーン目の transition は使われないので dissolve でよい。`,
+    content,
+  });
+  check();
+  let n = 0;
+  for (const r of d.scenes || []) {
+    const s = P.cur.scenes[(r.scene | 0) - 1]; if (!s) continue;
+    if (r.telop) s.telop = cleanTelop(r.telop, null);
+    s.emphasis = Array.isArray(r.emphasis) ? r.emphasis.filter(w => typeof w === 'string' && w && s.narration.includes(w)).slice(0, 4) : [];
+    if (r.transition) s.transition = cleanTrans(r.transition);
+    n++;
+  }
+  P.cur.directed = true;
+  ui.log('claude', `テロップと切り替えの演出を決めました（${n}シーン）。${d.concept || ''}`, 'done');
   ui.update(); await ui.save();
 }
 
@@ -362,13 +489,13 @@ export async function qcOnce(round, last) {
     const e = TL.items[i], s = e.s;
     const chars = [...s.narration].length, sp = s.audio ? s.audio.duration : 0;
     const cps = sp ? chars / sp : 0;
-    const three = e.chunks.filter(c => lineCount(c.text) > 2).length;
+    const three = e.chunks.filter(c => lineCount(c.text, s) > 2).length;
     const w = [];
     if (!s.audio) w.push('音声なし');
     if (cps > 8.5) w.push(`読み上げが速い（${cps.toFixed(1)}文字/秒）`);
     if (three) w.push('3行以上になる字幕がある');
     if (!s.img) w.push('画像なし');
-    content.push(api.txt(`シーン${i + 1}（${e.start.toFixed(1)}〜${e.end.toFixed(1)}秒, ${s.visual === 'video' ? '動画クリップ' : '静止画＋' + s.motion}）\nナレーション: ${s.narration}\n字幕の区切り: ${e.chunks.map(c => `「${c.text}」${(c.end - c.start).toFixed(1)}秒`).join(' / ')}${w.length ? `\n自動チェックの警告: ${w.join('、')}` : ''}`));
+    content.push(api.txt(`シーン${i + 1}（${s.role}, ${e.start.toFixed(1)}〜${e.end.toFixed(1)}秒, ${s.visual === 'video' ? '動画クリップ' : '静止画＋' + s.motion}, 入りの切り替え: ${i ? transOf(s).type : 'なし'}）\nテロップ: ${describeTelop(s)}\nナレーション: ${s.narration}\n字幕の区切り: ${e.chunks.map(c => `「${c.text}」${(c.end - c.start).toFixed(1)}秒`).join(' / ')}${w.length ? `\n自動チェックの警告: ${w.join('、')}` : ''}`));
     const first = e.chunks[0];
     const t = first ? Math.min(e.end - 0.05, first.start + Math.min(1, (first.end - first.start) / 2)) : e.start + e.len / 2;
     content.push(api.imgBlock(await snapshot(t)));
@@ -379,6 +506,7 @@ export async function qcOnce(round, last) {
     signal, tool: QC_TOOL, maxTokens: 4000,
     system: SYS_BASE + `
 最終チェックのルール:
+- テロップ（フォント・色・強調・動き）と切り替え効果も評価する。読みにくい、単調、映像と合わないなどの問題は restyle_telop / change_transition で直す（費用がかからない）。
 - 視聴者目線で、冒頭のつかみ、話の流れ、映像とナレーションの一致、字幕の読みやすさ（位置・行数・背景との重なり）、テンポ、長さを評価し score を付ける。
 - 公開して恥ずかしくない品質（目安 score 80以上、致命的な問題なし）なら approved=true、fixes は空。
 - そうでなければ approved=false とし、効果の大きい修正を最大6件 fixes に書く。修正は actions の中から選び、必要なら新しいプロンプトやナレーションを具体的に書く。
@@ -421,6 +549,7 @@ export async function run(callbacks, abortSignal) {
     ui.stage('images'); await imageLoop();
     ui.stage('videos'); await videoLoop();
     ui.stage('voice'); await voiceStep();
+    ui.stage('direct'); if (!P.cur.directed) await directStep();
     ui.stage('qc'); const ok = await qcLoop();
     ui.stage(ok ? 'done' : 'unapproved');
     if (!ok) ui.log('system', 'Claudeの承認は出ませんでした。編集タブで手直しして「もう一度チェック」するか、そのまま書き出すこともできます。', 'warn');
@@ -435,11 +564,23 @@ export async function run(callbacks, abortSignal) {
 }
 
 // Re-run only the final check (after manual edits).
+// Ask Claude to redo telop styling and transitions only.
+export async function redirect(callbacks, abortSignal) {
+  ui = { ...ui, ...callbacks }; signal = abortSignal;
+  try { ui.stage('direct'); await directStep(); P.cur.approved = false; ui.stage('unapproved'); return true; }
+  catch (e) {
+    if (e instanceof StopError || e.name === 'AbortError') ui.stage('stopped');
+    else { ui.stage('error'); ui.log('system', 'エラー: ' + (e.message || e), 'error'); }
+    await ui.save(); return false;
+  }
+}
+
 export async function recheck(callbacks, abortSignal) {
   ui = { ...ui, ...callbacks }; signal = abortSignal;
   try {
     P.cur.approved = false;
     await voiceStep();
+    if (!P.cur.directed) { ui.stage('direct'); await directStep(); }
     ui.stage('qc'); const ok = await qcLoop();
     ui.stage(ok ? 'done' : 'unapproved');
     return ok;

@@ -154,6 +154,12 @@ label.tog input{width:18px;height:18px;accent-color:var(--accent);flex:none}
 .vbadge{font-size:.78rem;font-weight:700;padding:3px 10px;border-radius:99px;background:var(--bg);color:var(--muted)}
 .vbadge.ok{background:var(--ok);color:#fff} .vbadge.ng{background:var(--warn);color:#fff}
 .verdictCard p{margin:0;font-size:.88rem}
+.row2{display:flex;flex-wrap:wrap;gap:6px}
+.es .look{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:.78rem;color:var(--muted)}
+.es .look select{width:auto;padding:4px 8px;font-size:.8rem}
+.es .look label{display:inline-flex;align-items:center;gap:6px;font-size:.78rem}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid var(--line);vertical-align:-2px}
+.fontchip{padding:1px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--line);font-size:.85rem;color:var(--ink)}
 .exportCard{display:grid;gap:10px}
 .exportCard h2{margin:0}
 progress{width:100%;height:8px;accent-color:var(--accent)}

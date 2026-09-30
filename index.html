@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@500&family=Noto+Sans+JP:wght@900&family=M+PLUS+Rounded+1c:wght@800&family=Zen+Maru+Gothic:wght@900&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2026.09.30-6">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@500&family=Noto+Sans+JP:wght@900&family=M+PLUS+Rounded+1c:wght@800&family=Zen+Maru+Gothic:wght@900&family=Mochiy+Pop+One&family=RocknRoll+One&family=Reggae+One&family=Rampart+One&family=Potta+One&family=Yusei+Magic&family=Kaisei+Decol:wght@700&display=swap">
+<link rel="stylesheet" href="css/app.css?v=2026.09.30-7">
 </head>
 <body>
 <div class="app">
@@ -40,7 +40,7 @@
           <div class="g3">
             <label>長さ<select id="len"><option value="15">15秒</option><option value="30" selected>30秒</option><option value="45">45秒</option><option value="60">60秒</option><option value="90">90秒</option></select></label>
             <label>ナレーションの声<select id="voice"></select></label>
-            <label>動画にするシーン<select id="vids"><option value="0">なし（静止画のみ）</option><option value="1">最大1</option><option value="2" selected>最大2</option><option value="3">最大3</option><option value="4">最大4</option></select></label>
+            <label>動画にするシーン<select id="vids"><option value="99" selected>大事なシーンすべて</option><option value="6">最大6</option><option value="4">最大4</option><option value="2">最大2</option><option value="0">なし（静止画のみ）</option></select></label>
           </div>
           <details class="more">
             <summary>チェック回数と予算</summary>
@@ -66,6 +66,7 @@
             <li data-stage="images"><b>画像の生成とチェック</b><small>ChatGPT ⇄ Claude</small></li>
             <li data-stage="videos"><b>動画クリップ</b><small>Gemini ⇄ Claude</small></li>
             <li data-stage="voice"><b>ナレーション</b><small>Gemini</small></li>
+            <li data-stage="direct"><b>テロップ・切り替え演出</b><small>Claude</small></li>
             <li data-stage="qc"><b>最終チェック</b><small>Claude</small></li>
             <li data-stage="export"><b>書き出し</b><small>この端末</small></li>
           </ol>
@@ -104,7 +105,7 @@
         <div class="card verdictCard" id="verdictCard">
           <div class="vhead"><span class="vbadge" id="vBadge">未チェック</span><b id="vScore"></b></div>
           <p id="vSummary" class="muted">Claudeの最終チェックはまだです。</p>
-          <button class="btn sm" id="recheckBtn">Claudeにもう一度チェックしてもらう</button>
+          <div class="row2"><button class="btn sm" id="recheckBtn">Claudeにもう一度チェックしてもらう</button><button class="btn sm" id="redirectBtn">演出をやり直してもらう</button></div>
         </div>
         <div class="card exportCard">
           <h2>書き出し</h2>
@@ -131,10 +132,11 @@
           <div class="elist" id="elist"></div>
         </div>
         <details class="card">
-          <summary><b>字幕の見た目</b></summary>
+          <summary><b>テロップの基本設定</b></summary>
           <div class="fields">
-            <div class="field"><label for="font">フォント</label><select id="font">
-              <option value="Noto Sans JP">ゴシック太字</option><option value="M PLUS Rounded 1c">丸ゴシック</option><option value="Zen Maru Gothic">やわらか丸</option><option value="Dela Gothic One">極太</option></select><span></span></div>
+            <div class="field tog"><label for="useDirection">Claudeが決めたテロップ演出・切り替えを使う</label><input type="checkbox" id="useDirection"></div>
+            <p class="muted small" style="margin:0">以下はClaudeの演出がないときの基本の見た目です（サイズと1行の文字数は演出にも反映されます）。</p>
+            <div class="field"><label for="font">フォント</label><select id="font"></select><span></span></div>
             <div class="field"><label for="size">文字サイズ</label><input type="range" id="size" min="40" max="130" step="2"><output data-for="size"></output></div>
             <div class="field"><label for="maxChars">1行の最大文字数</label><input type="range" id="maxChars" min="6" max="20" step="1"><output data-for="maxChars"></output></div>
             <div class="field"><label for="pos">縦位置</label><input type="range" id="pos" min="0.15" max="0.85" step="0.01"><output data-for="pos"></output></div>
@@ -145,7 +147,7 @@
             <div class="field tog"><label for="pop">ポンと出す</label><input type="checkbox" id="pop"></div>
             <div class="field tog"><label for="hidePeriod">文末の「。」を消す</label><input type="checkbox" id="hidePeriod"></div>
             <div class="field"><label for="motionAmt">静止画の動き</label><input type="range" id="motionAmt" min="0" max="0.2" step="0.01"><output data-for="motionAmt"></output></div>
-            <div class="field"><label for="fade">切り替えのフェード</label><input type="range" id="fade" min="0" max="1" step="0.05"><output data-for="fade"></output></div>
+            <div class="field"><label for="fade">切り替えの長さ（演出なし時）</label><input type="range" id="fade" min="0" max="1" step="0.05"><output data-for="fade"></output></div>
             <div class="field"><label for="pad">声のあとの間</label><input type="range" id="pad" min="0" max="1.5" step="0.05"><output data-for="pad"></output></div>
             <div class="field"><label for="voiceVol">声の音量</label><input type="range" id="voiceVol" min="0" max="2" step="0.05"><output data-for="voiceVol"></output></div>
           </div>
@@ -214,6 +216,6 @@
   </section>
 </div>
 <div class="toast" id="toast" hidden></div>
-<script type="module" src="js/app.js?v=2026.09.30-6"></script>
+<script type="module" src="js/app.js?v=2026.09.30-7"></script>
 </body>
 </html>

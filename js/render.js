@@ -1,9 +1,8 @@
 // Timeline, frame drawing (images, video clips, subtitles) and audio mix.
-import { S } from './state.js?v=2026.09.30-6';
+import { S, TELOP_FONTS, TRANSITIONS, TELOP_ANIMS } from './state.js?v=2026.09.30-7';
 
 export const W0 = 1080, H0 = 1920;
 const st = () => S.style;
-const FONTS = { 'Noto Sans JP': 900, 'M PLUS Rounded 1c': 800, 'Zen Maru Gothic': 900, 'Dela Gothic One': 400 };
 
 let actx = null;
 export const AC = () => actx || (actx = new (window.AudioContext || window.webkitAudioContext)());
@@ -64,18 +63,25 @@ export function makeBlur(img) {
 }
 
 const clipTime = (el, local) => { const d = el.duration; return isFinite(d) && d > 0 ? Math.min(local, d - 0.04) : local; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const easeInOut = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOutCubic = k => 1 - Math.pow(1 - k, 3);
+const easeOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
 
 function drawVisual(ctx, e, idx, local) {
   const s = e.s;
   if (s.visual === 'video' && s.video && s.video.readyState >= 2) {
-    const v = s.video, r = coverRect(v.videoWidth || 720, v.videoHeight || 1280, W0, H0, 1);
+    const v = s.video, d = v.duration;
+    // if the clip is shorter than the scene, hold the last frame with a slow push-in
+    const z = isFinite(d) && local > d ? 1 + Math.min(0.12, (local - d) * 0.05) : 1;
+    const r = coverRect(v.videoWidth || 720, v.videoHeight || 1280, W0, H0, z);
     ctx.drawImage(v, r.x, r.y, r.w, r.h); return;
   }
   if (!s.img) {
     const g = ctx.createLinearGradient(0, 0, 0, H0); g.addColorStop(0, '#1d2130'); g.addColorStop(1, '#0b0c11');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W0, H0); return;
   }
-  const p = Math.min(1, Math.max(0, local / Math.max(0.01, e.len + st().fade)));
+  const p = Math.min(1, Math.max(0, local / Math.max(0.01, e.len + 0.5)));
   const m = s.motion === 'static' ? 0 : st().motionAmt;
   const zoomOut = s.motion === 'zoom_out';
   const z = 1 + m * (zoomOut ? 1 - p : p) + (s.motion && s.motion.startsWith('pan') ? m * 0.6 : 0);
@@ -88,16 +94,83 @@ function drawVisual(ctx, e, idx, local) {
   ctx.drawImage(s.img, x, y, r.w, r.h);
 }
 
-const fontStr = () => `${FONTS[st().font] || 900} ${st().size}px "${st().font}", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif`;
-export const subtitleFont = fontStr;
+/* ---------- transitions between scenes ---------- */
+const TRANS = new Set(TRANSITIONS.map(t => t[0]));
+export function transOf(s) {
+  const t = st().useDirection && s && s.transition;
+  if (t && TRANS.has(t.type)) return { type: t.type, duration: t.type === 'cut' ? 0 : clamp(+t.duration || 0.5, 0.15, 1.2) };
+  return st().fade > 0 ? { type: 'dissolve', duration: st().fade } : { type: 'cut', duration: 0 };
+}
+function overlay(ctx, color, a) { if (a <= 0) return; ctx.save(); ctx.globalAlpha = Math.min(1, a); ctx.fillStyle = color; ctx.fillRect(0, 0, W0, H0); ctx.restore(); }
+function zoomAbout(ctx, z) { ctx.translate(W0 / 2, H0 / 2); ctx.scale(z, z); ctx.translate(-W0 / 2, -H0 / 2); }
+function drawTransition(ctx, pe, pi, e, i, local, tr) {
+  const p = clamp(local / tr.duration, 0, 1), q = easeInOut(p);
+  const prev = () => drawVisual(ctx, pe, pi, pe.len + local), cur = () => drawVisual(ctx, e, i, local);
+  switch (tr.type) {
+    case 'dip_black': case 'dip_white': {
+      const col = tr.type === 'dip_black' ? '#000' : '#fff';
+      if (p < 0.5) { prev(); overlay(ctx, col, p * 2); } else { cur(); overlay(ctx, col, (1 - p) * 2); }
+      break;
+    }
+    case 'flash':
+      if (p < 0.2) { prev(); overlay(ctx, '#fff', p / 0.2); } else { cur(); overlay(ctx, '#fff', Math.pow(1 - (p - 0.2) / 0.8, 2)); }
+      break;
+    case 'slide_left':
+      ctx.save(); ctx.translate(-W0 * q, 0); prev(); ctx.restore();
+      ctx.save(); ctx.translate(W0 * (1 - q), 0); cur(); ctx.restore();
+      break;
+    case 'slide_up':
+      ctx.save(); ctx.translate(0, -H0 * q); prev(); ctx.restore();
+      ctx.save(); ctx.translate(0, H0 * (1 - q)); cur(); ctx.restore();
+      break;
+    case 'zoom':
+      ctx.save(); zoomAbout(ctx, 1 + q * 0.7); prev(); ctx.restore();
+      ctx.save(); ctx.globalAlpha = q; zoomAbout(ctx, 1.35 - 0.35 * q); cur(); ctx.restore();
+      break;
+    case 'circle': {
+      prev();
+      const r = q * Math.hypot(W0, H0) / 2;
+      ctx.save(); ctx.beginPath(); ctx.arc(W0 / 2, H0 / 2, Math.max(1, r), 0, Math.PI * 2); ctx.clip(); cur(); ctx.restore();
+      ctx.save(); ctx.globalAlpha = 1 - q; ctx.strokeStyle = '#fff'; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(W0 / 2, H0 / 2, Math.max(1, r), 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      break;
+    }
+    default: // dissolve
+      prev(); ctx.save(); ctx.globalAlpha = q; cur(); ctx.restore();
+  }
+}
+
+/* ---------- telops ---------- */
+const FONTS = Object.fromEntries(TELOP_FONTS.map(f => [f[0], f[1]]));
+const ANIMS = new Set(TELOP_ANIMS.map(a => a[0]));
+const POS = { top: 0.22, upper: 0.36, center: 0.5, lower: 0.64, bottom: 0.7 };
+const isHex = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c.trim());
+// The look of one scene's telop: global settings, overridden by Claude's direction when present.
+export function sceneStyle(s) {
+  const g = st();
+  const out = { font: g.font, weight: FONTS[g.font] || 900, size: g.size, color: g.color, stroke: g.stroke, strokeW: g.strokeW, stroke2: '', accent: '#ffd84a',
+    pos: g.pos, anim: g.pop ? 'pop' : 'none', box: g.box ? 'dark' : 'none', maxChars: g.maxChars };
+  const t = g.useDirection && s && s.telop;
+  if (!t) return out;
+  if (t.font && FONTS[t.font] != null) { out.font = t.font; out.weight = FONTS[t.font]; }
+  if (+t.size) out.size = Math.round(g.size * clamp(+t.size, 0.75, 1.5));
+  if (isHex(t.color)) out.color = t.color; if (isHex(t.stroke)) out.stroke = t.stroke;
+  out.stroke2 = isHex(t.stroke2) ? t.stroke2 : '';
+  if (isHex(t.accent)) out.accent = t.accent;
+  if (POS[t.pos] != null) out.pos = POS[t.pos];
+  if (ANIMS.has(t.anim)) out.anim = t.anim;
+  if (['none', 'dark', 'accent'].includes(t.box)) out.box = t.box;
+  out.maxChars = Math.max(6, Math.round(g.maxChars * g.size / out.size));
+  return out;
+}
+const fontStr = sty => `${sty.weight} ${sty.size}px "${sty.font}", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif`;
 const NO_START = new Set([...'、。，．,.・：；:;？！?!ー－―…‥」』）)】〕］]｝}〉》ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〜~']);
 const wrapCache = new Map();
 export const clearWrapCache = () => wrapCache.clear();
-export function wrapText(ctx, text) {
-  const key = fontStr() + '|' + st().maxChars + '|' + text;
+export function wrapText(ctx, text, sty) {
+  const key = fontStr(sty) + '|' + sty.maxChars + '|' + text;
   if (wrapCache.has(key)) return wrapCache.get(key);
-  ctx.font = fontStr();
-  const maxW = Math.min(W0 * 0.9, st().maxChars * st().size * 1.02);
+  ctx.font = fontStr(sty);
+  const maxW = Math.min(W0 * 0.9, sty.maxChars * sty.size * 1.02);
   const toks = text.match(/[A-Za-z0-9'’%&@#\-_.,]+|\s+|[\s\S]/gu) || [];
   const mw = t => ctx.measureText(t).width;
   const greedy = lim => {
@@ -122,36 +195,72 @@ export function wrapText(ctx, text) {
     const alt = greedy(Math.max(mw(text) / lines.length * 1.06, Math.max(...toks.map(mw))));
     if (alt.length === lines.length) lines = alt;
   }
-  if (wrapCache.size > 400) wrapCache.clear();
+  if (wrapCache.size > 600) wrapCache.clear();
   wrapCache.set(key, lines);
   return lines;
 }
 export const dispText = t => st().hidePeriod ? t.replace(/[。．]+(?=$|[」』）)])/g, '').replace(/[。．]+$/, '') : t;
-const easeOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
 
-function drawSubtitle(ctx, ch, t, anim) {
-  const text = dispText(ch.text); if (!text) return;
-  const lines = wrapText(ctx, text);
-  const y0 = st();
-  const lh = y0.size * 1.3, blockH = lh * lines.length, cy = y0.pos * H0, cx = W0 / 2;
-  let sc = 1, al = 1;
-  if (y0.pop && anim) { const a = t - ch.start; const k = Math.min(1, Math.max(0, a / 0.18)); sc = 0.82 + 0.18 * easeOutBack(k); al = Math.min(1, Math.max(0, a / 0.07)); }
-  ctx.save(); ctx.globalAlpha = al;
-  ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-cx, -cy);
-  ctx.font = fontStr(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  if (y0.box) {
-    const wMax = Math.max(...lines.map(l => ctx.measureText(l).width));
-    const px = y0.size * 0.45, py = y0.size * 0.28;
-    const x = cx - wMax / 2 - px, y = cy - blockH / 2 - py, w = wMax + px * 2, h = blockH + py * 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.58)'; ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(x, y, w, h, Math.min(28, h / 2)); else ctx.rect(x, y, w, h);
-    ctx.fill();
+// split a line into [text, emphasized] runs
+function runs(line, emph) {
+  const chars = [...line]; const mask = new Array(chars.length).fill(false);
+  for (const w of emph || []) {
+    const wc = [...String(w || '').trim()]; if (!wc.length) continue;
+    for (let i = 0; i + wc.length <= chars.length; i++) if (wc.every((c, k) => chars[i + k] === c)) for (let k = 0; k < wc.length; k++) mask[i + k] = true;
   }
-  lines.forEach((ln, i) => {
-    const y = cy - blockH / 2 + lh * (i + 0.5);
-    if (y0.strokeW > 0) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = y0.strokeW * 2; ctx.strokeStyle = y0.stroke; ctx.strokeText(ln, cx, y); }
-    ctx.fillStyle = y0.color; ctx.fillText(ln, cx, y);
-  });
+  const out = [];
+  chars.forEach((c, i) => { const l = out[out.length - 1]; if (l && l[1] === mask[i]) l[0] += c; else out.push([c, mask[i]]); });
+  return out;
+}
+
+function drawSubtitle(ctx, ch, t, anim, sty, emph) {
+  const text = dispText(ch.text); if (!text) return;
+  const lines = wrapText(ctx, text, sty);
+  const lh = sty.size * 1.3, blockH = lh * lines.length, cy = sty.pos * H0, cx = W0 / 2;
+  const a = Math.max(0, t - ch.start);
+  let sc = 1, al = 1, dx = 0, dy = 0, reveal = Infinity;
+  if (anim) switch (sty.anim) {
+    case 'pop': { const k = Math.min(1, a / 0.18); sc = 0.82 + 0.18 * easeOutBack(k); al = Math.min(1, a / 0.07); break; }
+    case 'zoom': { const k = Math.min(1, a / 0.22); sc = 1.8 - 0.8 * easeOutCubic(k); al = Math.min(1, a / 0.1); break; }
+    case 'slide_up': { const k = Math.min(1, a / 0.25); dy = (1 - easeOutCubic(k)) * 90; al = Math.min(1, a / 0.15); break; }
+    case 'typewriter': { const n = [...text].length; reveal = Math.floor(a / clamp(0.6 / n, 0.03, 0.07)) + 1; break; }
+    case 'shake': if (a < 0.35) { const f = 1 - a / 0.35; dx = Math.sin(a * 90) * 14 * f; dy = Math.cos(a * 70) * 8 * f; sc = 1 + 0.12 * f; } break;
+    case 'fade': al = Math.min(1, a / 0.25); break;
+  }
+  ctx.save(); ctx.globalAlpha = al;
+  ctx.translate(cx + dx, cy + dy); ctx.scale(sc, sc); ctx.translate(-cx, -cy);
+  ctx.font = fontStr(sty); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const laid = lines.map(ln => { const r = runs(ln, emph).map(([s2, e2]) => ({ s: s2, e: e2, w: ctx.measureText(s2).width })); return { r, w: r.reduce((x, y) => x + y.w, 0) }; });
+  if (sty.box !== 'none') {
+    const wMax = Math.max(...laid.map(l => l.w)), px = sty.size * 0.45, py = sty.size * 0.28;
+    const x = cx - wMax / 2 - px, y = cy - blockH / 2 - py, w = wMax + px * 2, h = blockH + py * 2;
+    ctx.save(); ctx.fillStyle = sty.box === 'accent' ? sty.accent : 'rgba(0,0,0,0.6)'; if (sty.box === 'accent') ctx.globalAlpha *= 0.92;
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, Math.min(28, h / 2)); else ctx.rect(x, y, w, h); ctx.fill(); ctx.restore();
+  }
+  // passes: outer outline (with shadow), inner outline, fill; emphasized runs use the accent colour
+  const passes = [];
+  if (sty.stroke2) passes.push({ kind: 'stroke', color: () => sty.stroke2, width: sty.strokeW * 2 + 18, shadow: true });
+  if (sty.strokeW > 0) passes.push({ kind: 'stroke', color: () => sty.stroke, width: sty.strokeW * 2, shadow: !sty.stroke2 });
+  passes.push({ kind: 'fill', color: run => run.e && sty.box !== 'accent' ? sty.accent : sty.color });
+  for (const ps of passes) {
+    let left = reveal;
+    ctx.save();
+    if (ps.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6; }
+    laid.forEach((ln, i) => {
+      const y = cy - blockH / 2 + lh * (i + 0.5);
+      let x = cx - ln.w / 2;
+      for (const run of ln.r) {
+        if (left <= 0) break;
+        let str = run.s; const n = [...str].length;
+        if (n > left) str = [...str].slice(0, left).join('');
+        left -= n;
+        if (ps.kind === 'stroke') { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = ps.width; ctx.strokeStyle = ps.color(run); ctx.strokeText(str, x, y); }
+        else { ctx.fillStyle = ps.color(run); ctx.fillText(str, x, y); }
+        x += run.w;
+      }
+    });
+    ctx.restore();
+  }
   ctx.restore();
 }
 
@@ -163,14 +272,12 @@ export function drawFrame(ctx, t, scale, anim = true) {
     ctx.fillStyle = '#8a90a3'; ctx.font = `700 44px "Zen Kaku Gothic New", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('まだシーンがありません', W0 / 2, H0 / 2); return;
   }
-  const i = sceneIndexAt(t), e = items[i], local = t - e.start, fade = st().fade;
-  if (fade > 0 && i > 0 && local < fade) {
-    const pe = items[i - 1];
-    drawVisual(ctx, pe, i - 1, pe.len + local);
-    ctx.globalAlpha = Math.max(0, local / fade); drawVisual(ctx, e, i, local); ctx.globalAlpha = 1;
-  } else drawVisual(ctx, e, i, local);
+  const i = sceneIndexAt(t), e = items[i], local = t - e.start;
+  const tr = i > 0 ? transOf(e.s) : null;
+  if (tr && tr.duration > 0 && local < tr.duration) drawTransition(ctx, items[i - 1], i - 1, e, i, local, tr);
+  else drawVisual(ctx, e, i, local);
   const ch = e.chunks.find(c => t >= c.start && t < c.end) || (t >= TL.total - 1e-3 ? e.chunks[e.chunks.length - 1] : null);
-  if (ch) drawSubtitle(ctx, ch, t, anim);
+  if (ch) drawSubtitle(ctx, ch, t, anim, sceneStyle(e.s), st().useDirection ? e.s.emphasis : null);
 }
 
 /* ---------- video clip positioning ---------- */
@@ -185,16 +292,16 @@ function seek(el, time) {
 // For export: put every clip visible at time t on the exact frame.
 export async function prepareFrame(t) {
   if (!TL.items.length) return;
-  const i = sceneIndexAt(t), fade = st().fade;
-  const need = [[i, t - TL.items[i].start]];
-  if (fade > 0 && i > 0 && t - TL.items[i].start < fade) need.push([i - 1, TL.items[i - 1].len + t - TL.items[i].start]);
+  const i = sceneIndexAt(t), local = t - TL.items[i].start;
+  const need = [[i, local]];
+  if (i > 0) { const tr = transOf(TL.items[i].s); if (tr.duration > 0 && local < tr.duration) need.push([i - 1, TL.items[i - 1].len + local]); }
   for (const [k, local] of need) { const s = TL.items[k].s; if (s.visual === 'video' && s.video) { s.video.pause(); await seek(s.video, clipTime(s.video, local)); } }
 }
 // For preview: keep clips roughly in sync while playing, or parked on the frame when scrubbing.
 export function syncPreviewVideos(t, playing, redraw) {
   TL.items.forEach((e, k) => {
     const s = e.s; if (s.visual !== 'video' || !s.video) return;
-    const v = s.video, local = t - e.start, visible = t >= e.start - 0.05 && t < e.end + st().fade;
+    const v = s.video, local = t - e.start, visible = t >= e.start - 0.05 && t < e.end + (k + 1 < TL.items.length ? transOf(TL.items[k + 1].s).duration : 0);
     if (!visible) { if (!v.paused) v.pause(); return; }
     const want = clipTime(v, Math.max(0, local));
     if (playing) {
@@ -258,8 +365,10 @@ export async function getMix(scenes, bgm) {
 }
 
 export async function ensureFonts(scenes) {
-  const txt = [...new Set(scenes.map(s => s.narration).join(''))].join('') || 'あ';
-  try { await document.fonts.load(fontStr(), txt); } catch (e) {}
+  const byFont = new Map();
+  for (const s of scenes) { const f = fontStr(sceneStyle(s)); byFont.set(f, (byFont.get(f) || '') + (s.narration || '')); }
+  if (!byFont.size) byFont.set(fontStr(sceneStyle(null)), 'あ');
+  try { await Promise.all([...byFont].map(([f, txt]) => document.fonts.load(f, [...new Set(txt)].join('') || 'あ'))); } catch (e) {}
   wrapCache.clear();
 }
 
@@ -271,7 +380,7 @@ export async function snapshot(t, w = 360) {
   return c.toDataURL('image/jpeg', 0.72).split(',')[1];
 }
 // Lines of a subtitle chunk at the current style (for QC checks).
-export function lineCount(text) {
+export function lineCount(text, scene) {
   const c = document.createElement('canvas').getContext('2d');
-  return wrapText(c, dispText(text)).length;
+  return wrapText(c, dispText(text), sceneStyle(scene)).length;
 }

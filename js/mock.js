@@ -74,7 +74,7 @@ export async function claudeTool({ tool, content, signal }) {
       title: 'デモ：' + theme.slice(0, 18), hook: '暗い朝の静けさで引き込む',
       style_bible: 'soft gradient illustration, warm dawn palette, minimal shapes',
       voice_style: '落ち着いた声で、少しゆっくり',
-      scenes: lines.map((n, i) => ({ narration: n, image_prompt: `Demo scene ${i + 1}: ${n}`, visual: i === 1 && vids > 0 ? 'video' : 'image', video_prompt: 'slow push-in', motion: ['zoom_in', 'pan_left', 'zoom_out', 'pan_right', 'zoom_in', 'static'][i] })),
+      scenes: lines.map((n, i) => ({ narration: n, image_prompt: `Demo scene ${i + 1}: ${n}`, visual: i === 1 && vids > 0 ? 'video' : 'image', video_prompt: 'slow push-in', motion: ['zoom_in', 'pan_left', 'zoom_out', 'pan_right', 'zoom_in', 'static'][i], role: ['hook', 'main', 'support', 'main', 'main', 'ending'][i] })),
     };
   }
   if (tool.name === 'submit_review') {
@@ -89,6 +89,22 @@ export async function claudeTool({ tool, content, signal }) {
     videoReviewCalls++;
     const nums = [...text.matchAll(/シーン(\d+)（/g)].map(m => +m[1]);
     return { reviews: nums.map(n => ({ scene: n, verdict: 'ok' })) };
+  }
+  if (tool.name === 'submit_direction') {
+    const nums = [...text.matchAll(/シーン(\d+)（/g)].map(m => +m[1]);
+    const looks = [
+      { font: 'Dela Gothic One', color: '#ffffff', stroke: '#e0245e', stroke2: '#1a1a1a', accent: '#ffe14d', size: 1.25, pos: 'center', anim: 'zoom', box: 'none' },
+      { font: 'Noto Sans JP', color: '#ffffff', stroke: '#1b2a6b', stroke2: '', accent: '#ffd84a', size: 1, pos: 'lower', anim: 'pop', box: 'none' },
+      { font: 'Mochiy Pop One', color: '#fff7e0', stroke: '#6a2c91', stroke2: '#ffffff', accent: '#ff7ab6', size: 1, pos: 'lower', anim: 'slide_up', box: 'none' },
+      { font: 'Noto Sans JP', color: '#1a1a1a', stroke: '#ffffff', stroke2: '', accent: '#e0245e', size: 0.95, pos: 'lower', anim: 'typewriter', box: 'accent' },
+      { font: 'Reggae One', color: '#ffe14d', stroke: '#111111', stroke2: '', accent: '#ffffff', size: 1.1, pos: 'upper', anim: 'shake', box: 'none' },
+      { font: 'Kaisei Decol', color: '#ffffff', stroke: '#222222', stroke2: '', accent: '#ffd84a', size: 1, pos: 'center', anim: 'fade', box: 'dark' },
+    ];
+    const trans = ['dissolve', 'flash', 'slide_left', 'dip_black', 'zoom', 'circle'];
+    return {
+      concept: '（デモ）冒頭は極太で強く、本編は読みやすさ重視、締めは上品に。',
+      scenes: nums.map((n, i) => ({ scene: n, telop: looks[i % looks.length], emphasis: i === 0 ? ['朝5時'] : i === 1 ? ['いちばん'] : [], transition: { type: trans[i % trans.length], duration: 0.6 } })),
+    };
   }
   if (tool.name === 'submit_qc') {
     qcCalls++;
