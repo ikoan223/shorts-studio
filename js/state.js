@@ -1,4 +1,4 @@
-export const VERSION = '2026.09.30-3';
+export const VERSION = '2026.09.30-4';
 // Settings (per device, localStorage) and the current project.
 export const DEF_STYLE = {
   font: 'Noto Sans JP', size: 78, maxChars: 12, pos: 0.66, color: '#ffffff', stroke: '#111111', strokeW: 12,

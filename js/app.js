@@ -1,10 +1,10 @@
-import { S, P, saveSettings, newProject, nextId, VERSION } from './state.js?v=2026.09.30-3';
-import * as pipe from './pipeline.js?v=2026.09.30-3';
-import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-3';
-import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-3';
-import { exportVideo } from './export.js?v=2026.09.30-3';
-import { testKeys } from './apis.js?v=2026.09.30-3';
-import { resetMock } from './mock.js?v=2026.09.30-3';
+import { S, P, saveSettings, newProject, nextId, VERSION } from './state.js?v=2026.09.30-4';
+import * as pipe from './pipeline.js?v=2026.09.30-4';
+import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-4';
+import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-4';
+import { exportVideo } from './export.js?v=2026.09.30-4';
+import { testKeys } from './apis.js?v=2026.09.30-4';
+import { resetMock } from './mock.js?v=2026.09.30-4';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];

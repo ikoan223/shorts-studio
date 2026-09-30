@@ -1,6 +1,6 @@
 // Direct browser calls to Anthropic (Claude), OpenAI (images) and Google Gemini (voice, video).
-import { S, P } from './state.js?v=2026.09.30-3';
-import * as mock from './mock.js?v=2026.09.30-3';
+import { S, P } from './state.js?v=2026.09.30-4';
+import * as mock from './mock.js?v=2026.09.30-4';
 
 export class ApiError extends Error {
   constructor(provider, status, message) { super(`${provider}: ${message}`); this.provider = provider; this.status = status; this.raw = message; }
@@ -65,7 +65,11 @@ function parseJsonText(t) {
   if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {} }
   return null;
 }
-let claudeMode = 'schema'; // 'schema' (output_config JSON schema) or 'tool' (tool use, auto choice)
+// Three ways to get a structured answer; some models/accounts reject the first two, so step down and remember what worked.
+const MODES = ['schema', 'tool', 'text'];
+const MODE_KEY = 'shortsStudio.claudeMode';
+const loadMode = () => { try { const o = JSON.parse(localStorage.getItem(MODE_KEY) || '{}'); return o[S.models.claude]; } catch (e) { return null; } };
+const saveMode = m => { try { const o = JSON.parse(localStorage.getItem(MODE_KEY) || '{}'); o[S.models.claude] = m; localStorage.setItem(MODE_KEY, JSON.stringify(o)); } catch (e) {} };
 // content: array of Anthropic content blocks. Returns an object shaped like tool.input_schema.
 export async function claudeTool({ system, content, tool, maxTokens = 8000, signal }) {
   if (S.demo) return mock.claudeTool({ tool, content, signal });
@@ -75,15 +79,18 @@ export async function claudeTool({ system, content, tool, maxTokens = 8000, sign
   const base = { model: S.models.claude, max_tokens: maxTokens, messages: [{ role: 'user', content }] };
   const bodies = {
     schema: () => ({ ...base, system: `${system}\n\n返答は指定されたJSONスキーマに従うJSONだけにする。（${tool.description}）`, output_config: { format: { type: 'json_schema', schema: strictSchema(tool.input_schema) } } }),
-    tool: () => ({ ...base, system: `${system}\n\n必ず ${tool.name} ツールを1回だけ呼び出して回答する。ツール以外の文章は書かない。`, tools: [tool], tool_choice: { type: 'auto' } }),
+    tool: () => ({ ...base, system: `${system}\n\n必ず ${tool.name} ツールを1回だけ呼び出して回答する。ツール以外の文章は書かない。`, tools: [tool] }),
+    text: () => ({ ...base, system: `${system}\n\n【返答形式】${tool.description}。次のJSONスキーマに従うJSONオブジェクトを1つだけ出力する。前置き・説明・コードブロック記号は書かない。\n${JSON.stringify(tool.input_schema)}` }),
   };
-  let j;
-  try { j = await send(bodies[claudeMode]()); }
-  catch (e) {
-    // this model/account may not accept one of the two structured modes: switch once and remember
-    if (e.status !== 400 || !/output_config|format|schema|tool_choice|tools?\b|not supported/i.test(e.raw || '')) throw e;
-    claudeMode = claudeMode === 'schema' ? 'tool' : 'schema';
-    j = await send(bodies[claudeMode]());
+  const start = Math.max(0, MODES.indexOf(loadMode()));
+  let j = null; const errs = [];
+  for (let i = start; i < MODES.length; i++) {
+    try { j = await send(bodies[MODES[i]]()); if (i !== start || !loadMode()) saveMode(MODES[i]); break; }
+    catch (e) {
+      if (e.status !== 400) throw e;          // auth, rate limit, network: not a format problem
+      errs.push(`${MODES[i]}: ${e.raw}`);
+      if (i === MODES.length - 1) throw new ApiError('Claude', 400, errs.join(' ／ '));
+    }
   }
   if (j.usage) addCost('claude', { in: (j.usage.input_tokens || 0) + (j.usage.cache_read_input_tokens || 0) + (j.usage.cache_creation_input_tokens || 0), out: j.usage.output_tokens || 0 });
   const blocks = j.content || [];
