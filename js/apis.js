@@ -1,6 +1,6 @@
 // Direct browser calls to Anthropic (Claude), OpenAI (images) and Google Gemini (voice, video).
-import { S, P } from './state.js?v=2026.09.30-4';
-import * as mock from './mock.js?v=2026.09.30-4';
+import { S, P } from './state.js?v=2026.09.30-5';
+import * as mock from './mock.js?v=2026.09.30-5';
 
 export class ApiError extends Error {
   constructor(provider, status, message) { super(`${provider}: ${message}`); this.provider = provider; this.status = status; this.raw = message; }
@@ -16,7 +16,8 @@ async function jfetch(provider, url, opts) {
   catch (e) { if (e.name === 'AbortError') throw e; throw new ApiError(provider, 0, 'サーバーに接続できませんでした（通信環境かAPIキーの設定を確認してください）'); }
   const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch (e) {}
   if (!r.ok) {
-    const m = (j && (j.error && (j.error.message || j.error.type) || j.message)) || txt.slice(0, 300) || r.statusText;
+    let m = (j && (j.error && (j.error.message || j.error.type) || j.message)) || txt.slice(0, 300) || r.statusText;
+    if (r.status === 404 && /model/i.test(m)) m += '（設定タブの「使うモデル」の名前を確認してください）';
     throw new ApiError(provider, r.status, m);
   }
   return j;

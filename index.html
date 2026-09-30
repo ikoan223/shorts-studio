@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@500&family=Noto+Sans+JP:wght@900&family=M+PLUS+Rounded+1c:wght@800&family=Zen+Maru+Gothic:wght@900&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2026.09.30-4">
+<link rel="stylesheet" href="css/app.css?v=2026.09.30-5">
 </head>
 <body>
 <div class="app">
@@ -168,11 +168,11 @@
         <h2>APIキー</h2>
         <p class="muted small">キーはこの端末のブラウザにだけ保存され、各社のAPIへ直接送られます。スマホとPCでそれぞれ入力してください。共用の端末では使わないでください。</p>
         <div class="keys">
-          <label>Claude（Anthropic）<span class="kh"><input type="password" id="k-anthropic" autocomplete="off" spellcheck="false" placeholder="sk-ant-..."><button type="button" class="btn sm ghost" data-eye="k-anthropic">表示</button></span>
+          <label>Claude（Anthropic）<span class="kh"><input type="password" id="k-anthropic" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="sk-ant-..."><button type="button" class="btn sm ghost" data-eye="k-anthropic">表示</button></span>
             <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">キーを発行する</a></label>
-          <label>ChatGPT（OpenAI）<span class="kh"><input type="password" id="k-openai" autocomplete="off" spellcheck="false" placeholder="sk-..."><button type="button" class="btn sm ghost" data-eye="k-openai">表示</button></span>
+          <label>ChatGPT（OpenAI）<span class="kh"><input type="password" id="k-openai" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="sk-..."><button type="button" class="btn sm ghost" data-eye="k-openai">表示</button></span>
             <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">キーを発行する</a></label>
-          <label>Gemini（Google AI Studio）<span class="kh"><input type="password" id="k-gemini" autocomplete="off" spellcheck="false" placeholder="AIza..."><button type="button" class="btn sm ghost" data-eye="k-gemini">表示</button></span>
+          <label>Gemini（Google AI Studio）<span class="kh"><input type="password" id="k-gemini" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="AIza..."><button type="button" class="btn sm ghost" data-eye="k-gemini">表示</button></span>
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">キーを発行する</a></label>
         </div>
         <div class="actions"><button class="btn" id="testKeys" type="button">接続を確認</button><span class="small" id="keyResult"></span></div>
@@ -185,10 +185,10 @@
         <h2>使うモデル</h2>
         <p class="muted small">モデルが新しくなったら、ここを書き換えれば対応できます。動画のモデル名が <code>veo</code> で始まる場合はVeoの呼び出し方式に切り替わります。</p>
         <div class="fields">
-          <div class="field wide"><label for="m-claude">Claude</label><input id="m-claude" list="claudeModels" spellcheck="false"></div>
-          <div class="field wide"><label for="m-image">画像（OpenAI）</label><input id="m-image" list="imageModels" spellcheck="false"></div>
-          <div class="field wide"><label for="m-tts">音声（Gemini）</label><input id="m-tts" list="ttsModels" spellcheck="false"></div>
-          <div class="field wide"><label for="m-video">動画（Gemini）</label><input id="m-video" list="videoModels" spellcheck="false"></div>
+          <div class="field wide"><label for="m-claude">Claude</label><input id="m-claude" list="claudeModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
+          <div class="field wide"><label for="m-image">画像（OpenAI）</label><input id="m-image" list="imageModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
+          <div class="field wide"><label for="m-tts">音声（Gemini）</label><input id="m-tts" list="ttsModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
+          <div class="field wide"><label for="m-video">動画（Gemini）</label><input id="m-video" list="videoModels" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off"></div>
           <div class="field wide"><label for="imageQuality">画像の品質</label><select id="imageQuality"><option value="low">low（安い）</option><option value="medium">medium</option><option value="high">high（高い）</option></select></div>
           <div class="field wide"><label for="imageSize">画像サイズ</label><select id="imageSize"><option value="864x1536">864×1536（9:16）</option><option value="1152x2048">1152×2048（9:16・高精細）</option><option value="1024x1536">1024×1536（2:3）</option></select></div>
         </div>
@@ -218,6 +218,6 @@
   </section>
 </div>
 <div class="toast" id="toast" hidden></div>
-<script type="module" src="js/app.js?v=2026.09.30-4"></script>
+<script type="module" src="js/app.js?v=2026.09.30-5"></script>
 </body>
 </html>

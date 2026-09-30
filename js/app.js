@@ -1,10 +1,10 @@
-import { S, P, saveSettings, newProject, nextId, VERSION } from './state.js?v=2026.09.30-4';
-import * as pipe from './pipeline.js?v=2026.09.30-4';
-import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-4';
-import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-4';
-import { exportVideo } from './export.js?v=2026.09.30-4';
-import { testKeys } from './apis.js?v=2026.09.30-4';
-import { resetMock } from './mock.js?v=2026.09.30-4';
+import { S, P, saveSettings, newProject, nextId, VERSION, normModel, DEF_SETTINGS } from './state.js?v=2026.09.30-5';
+import * as pipe from './pipeline.js?v=2026.09.30-5';
+import { saveProject, loadProject, clearProject } from './store.js?v=2026.09.30-5';
+import { buildTimeline, TL, drawFrame, W0, AC, getMix, syncPreviewVideos, stopAllVideos, clearWrapCache, ensureFonts, sceneIndexAt, decodeAudio } from './render.js?v=2026.09.30-5';
+import { exportVideo } from './export.js?v=2026.09.30-5';
+import { testKeys } from './apis.js?v=2026.09.30-5';
+import { resetMock } from './mock.js?v=2026.09.30-5';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -35,7 +35,7 @@ function bindSettings() {
     el.addEventListener('change', () => { S.keys[k] = el.value.trim(); saveSettings(); updateKeyWarn(); });
   }
   $$('[data-eye]').forEach(b => b.addEventListener('click', () => { const i = $('#' + b.dataset.eye); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.textContent = show ? '隠す' : '表示'; }));
-  for (const k of ['claude', 'image', 'tts', 'video']) { const el = $('#m-' + k); el.value = S.models[k]; el.addEventListener('change', () => { S.models[k] = el.value.trim() || S.models[k]; el.value = S.models[k]; saveSettings(); }); }
+  for (const k of ['claude', 'image', 'tts', 'video']) { const el = $('#m-' + k); el.value = S.models[k]; el.addEventListener('change', () => { S.models[k] = normModel(el.value) || DEF_SETTINGS.models[k]; el.value = S.models[k]; saveSettings(); }); }
   for (const k of ['imageQuality', 'imageSize']) { const el = $('#' + k); el.value = S[k]; el.addEventListener('change', () => { S[k] = el.value; saveSettings(); }); }
   for (const k of Object.keys(S.prices)) { const el = $('#p-' + k); if (!el) continue; el.value = S.prices[k]; el.addEventListener('change', () => { const v = parseFloat(el.value); if (v >= 0) S.prices[k] = v; saveSettings(); }); }
   const demo = $('#demo'); demo.checked = S.demo;

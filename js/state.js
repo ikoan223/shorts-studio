@@ -1,4 +1,4 @@
-export const VERSION = '2026.09.30-4';
+export const VERSION = '2026.09.30-5';
 // Settings (per device, localStorage) and the current project.
 export const DEF_STYLE = {
   font: 'Noto Sans JP', size: 78, maxChars: 12, pos: 0.66, color: '#ffffff', stroke: '#111111', strokeW: 12,
@@ -28,7 +28,11 @@ function merge(base, over) {
 function load() {
   try { return merge(DEF_SETTINGS, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return merge(DEF_SETTINGS, {}); }
 }
+export const normModel = v => String(v || '').trim().toLowerCase().replace(/\s+/g, '');
 export const S = load();
+// model IDs are always lowercase; phone keyboards like to capitalise the first letter
+for (const k in S.models) S.models[k] = normModel(S.models[k]) || DEF_SETTINGS.models[k];
+for (const k in S.keys) S.keys[k] = String(S.keys[k] || '').trim();
 export function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
 let uid = Date.now() % 1e6;
